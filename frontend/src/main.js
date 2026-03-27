@@ -1,5 +1,5 @@
 import '../style.css';
-import { auth, clients, tracking, proposals, email, documents, gem, safeJ } from './services/api.js';
+import { auth, clients, tracking, proposals, email, documents, gem, voice, safeJ } from './services/api.js';
 import mammoth from 'mammoth';
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle, ShadingType } from 'docx';
 import { saveAs } from 'file-saver';
@@ -1135,9 +1135,9 @@ document.getElementById('msgIn').addEventListener('keydown', e => {
         if (mediaRecorder) mediaRecorder.stop();
         if (socket) socket.close();
         
-        // Auto-send if there's significant content and callingMode is ON
+        // Auto-send if there's any content and callingMode is ON
         const val = document.getElementById('msgIn').value.trim();
-        if (callingMode && val.length > 3) {
+        if (callingMode && val.length > 0) {
             setTimeout(() => {
                 if (document.getElementById('msgIn').value.trim() === val) {
                    document.getElementById('sendBtn').click();

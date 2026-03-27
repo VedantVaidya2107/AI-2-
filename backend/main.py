@@ -53,7 +53,11 @@ print(f"[CORS] Allowed Origins: {origins if is_production else '*'}")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "https://vedantvaidya2107.github.io"
+    ],
     allow_origin_regex=r"https?://(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?",
     allow_credentials=True,
     allow_methods=["*"],
