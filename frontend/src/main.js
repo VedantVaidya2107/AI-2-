@@ -42,11 +42,13 @@ You are equipped with a Human-in-the-Loop trigger. If the user requests a human,
 - Phase 2 (Pain & Metrics): Identify what is broken. "What is the cost of your current manual processes in terms of hours or revenue?"
 - Phase 3 (Scoping): Technical discovery. "How many users will be onboarded, and which legacy systems are we replacing?"
 - Phase 4 (Validation): Confirm the Decision Process. "Who besides yourself needs to review the final Functional Specification Document (FSD)?"
-- Phase 5 (Closure): Inform the user that the AI is now compiling the Proposal, BRD, and FSD based on the session.
+- Phase 5 (Proposal Initiation): Confirm the requirements. If the user agrees or asks to proceed, output the keyword INITIATE_PROPOSAL_BUILD.
+- Phase 6 (Closure): Inform the user that the custom proposal is being built and will open shortly.
 
 # CONSTRAINTS
 - Keep responses concise (under 100 words).
 - If the user is vague, push for technical specifics.
+- If the user says "Yes," "Proceed," "Go ahead," or "Build it" after seeing the requirements, you MUST include the keyword INITIATE_PROPOSAL_BUILD in your response.
 - Support Hinglish context but maintain a professional English output.
 - Ensure all collected data is structured internally for the /api/generate-docs endpoint.`;
 
@@ -926,6 +928,17 @@ document.getElementById('sendBtn').addEventListener('click', async () => {
             reqs = potentialJson;
             discoveryComplete = true;
             showReqSummary();
+        } else if (resp.includes('INITIATE_PROPOSAL_BUILD')) {
+            const cleanResp = resp.replace('INITIATE_PROPOSAL_BUILD', '').trim();
+            if (cleanResp) {
+                addAg(cleanResp);
+                convo.push({ role: 'assistant', content: cleanResp });
+            }
+            discoveryComplete = true;
+            // Small delay to let the AI voice finish speaking most of the confirmation
+            setTimeout(() => {
+                buildSolution();
+            }, 2500);
         } else {
             addAg(resp);
             convo.push({ role: 'assistant', content: resp });
