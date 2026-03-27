@@ -1001,7 +1001,7 @@ document.getElementById('msgIn').addEventListener('keydown', e => {
             return;
         }
 
-        // Step 2: Get Deepgram key (try backend first, fallback to env var)
+        // Step 2: Get Deepgram key (try backend first, fallback to env, then hardcoded)
         let key;
         try {
             showToast('Connecting to voice service…', 'success');
@@ -1009,16 +1009,16 @@ document.getElementById('msgIn').addEventListener('keydown', e => {
             key = dgData.key;
             if (!key || key === 'mock-key') throw new Error('No valid key from backend');
         } catch (err) {
-            // Fallback to env var embedded at build time
+            // Fallback 1: Vite env var
             key = import.meta.env.VITE_DEEPGRAM_KEY || null;
+            
+            // Fallback 2: Hardcoded static key (guaranteed to work if others fail)
             if (!key) {
-                console.error('[Voice Key Error]', err);
-                stream.getTracks().forEach(t => t.stop());
-                showToast('Voice service unavailable — backend may be starting up. Try again in 30s.', 'error');
-                listening = false;
-                return;
+                key = '6e712ff0167128210a0dae3fc2fcda370858fc7e';
+                console.log('[Voice] Using hardcoded fallback key');
+            } else {
+                console.log('[Voice] Using embedded Deepgram key from build env');
             }
-            console.log('[Voice] Using embedded Deepgram key');
         }
 
         // Step 3: Connect to Deepgram WebSocket
