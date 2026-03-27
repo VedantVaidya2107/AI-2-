@@ -18,8 +18,9 @@ let currentTrackingClient = null;
 let activeClientId = null;
 let activeKpiFilter = 'all';
 let clientStatuses = {};
-let voiceEnabled = true; // Default to true for Deepgram voice discovery
+let voiceEnabled = true; 
 let audioContext = null;
+let currentAudioSource = null; // Track active speech to prevent overlaps
 
 
 /* ══ ENHANCED ZOHO KNOWLEDGE BASE WITH NATURAL LANGUAGE UNDERSTANDING ══ */
@@ -905,6 +906,13 @@ document.getElementById('sendBtn').addEventListener('click', async () => {
     const inp = document.getElementById('msgIn');
     const msg = inp.value.trim();
     if (!msg) return;
+
+    // Stop agent talking if user sends a message
+    if (currentAudioSource) {
+        try { currentAudioSource.stop(); } catch(e){}
+        currentAudioSource = null;
+    }
+
     if (discoveryComplete) discoveryComplete = false;
     addUs(msg);
     convo.push({ role: 'user', content: msg });
@@ -1147,6 +1155,11 @@ document.getElementById('msgIn').addEventListener('keydown', e => {
     }
 
     micBtn.addEventListener('click', () => {
+        // Stop agent talking if user takes the mic
+        if (currentAudioSource) {
+            try { currentAudioSource.stop(); } catch(e){}
+            currentAudioSource = null;
+        }
         if (discoveryComplete) return;
         if (listening) {
             stopRecording();
@@ -2040,7 +2053,16 @@ function addAg(msg, opts = {}) {
 
 async function playVoice(text) {
     try {
-        const cleanText = text.replace(/<[^>]*>/g, '').trim();
+        // Stop previous audio if still playing
+        if (currentAudioSource) {
+            try { currentAudioSource.stop(); } catch(e){}
+            currentAudioSource = null;
+        }
+
+        let cleanText = text.replace(/<[^>]*>/g, ''); // Strip HTML
+        cleanText = cleanText.replace(/\*\*|__|#|`|\[|\]|\(|\)/g, ''); // Strip Markdown symbols
+        cleanText = cleanText.replace(/\s+/g, ' ').trim();
+
         if (!cleanText) return;
         const data = await voice.speak(cleanText);
         if (data.audio) {
@@ -2062,17 +2084,22 @@ async function playVoice(text) {
             if (wave) wave.classList.add('active');
 
             source.onended = () => {
-                // Stop wave animation
-                if (wave) wave.classList.remove('active');
+                // Only trigger mic if THIS specific source finished naturally
+                if (currentAudioSource === source) {
+                    currentAudioSource = null;
+                    const wave = document.querySelector('.voice-wave');
+                    if (wave) wave.classList.remove('active');
 
-                const mic = document.getElementById('micBtn');
-                const callBtn = document.getElementById('callToggleBtn');
-                const isCalling = callBtn && callBtn.classList.contains('call-active');
-                
-                if (isCalling && mic && !mic.classList.contains('mic-listening')) {
-                    mic.click();
+                    const mic = document.getElementById('micBtn');
+                    const callBtn = document.getElementById('callToggleBtn');
+                    const isCalling = callBtn && callBtn.classList.contains('call-active');
+                    
+                    if (isCalling && mic && !mic.classList.contains('mic-listening')) {
+                        mic.click();
+                    }
                 }
             };
+            currentAudioSource = source;
             source.start(0);
         }
     } catch (e) {
