@@ -1015,7 +1015,9 @@ document.getElementById('msgIn').addEventListener('keydown', e => {
             callingMode = !callingMode;
             callBtn.classList.toggle('call-active', callingMode);
             
+            const statusEl = document.getElementById('callStatus');
             if (callingMode) {
+                if (statusEl) statusEl.classList.remove('hidden');
                 showToast('Calling Mode: ON (Hands-free)', 'success');
                 // Prompt the last message if we just turned calling mode on
                 const lastAg = Array.from(document.querySelectorAll('.msg.ag')).pop();
@@ -1023,6 +1025,7 @@ document.getElementById('msgIn').addEventListener('keydown', e => {
                     playVoice(lastAg.innerText);
                 }
             } else {
+                if (statusEl) statusEl.classList.add('hidden');
                 showToast('Calling Mode: OFF (Manual)', 'success');
             }
         };
@@ -2047,7 +2050,15 @@ async function playVoice(text) {
             const source = audioContext.createBufferSource();
             source.buffer = buffer;
             source.connect(audioContext.destination);
+
+            // Start wave animation
+            const wave = document.querySelector('.voice-wave');
+            if (wave) wave.classList.add('active');
+
             source.onended = () => {
+                // Stop wave animation
+                if (wave) wave.classList.remove('active');
+
                 const mic = document.getElementById('micBtn');
                 const callBtn = document.getElementById('callToggleBtn');
                 const isCalling = callBtn && callBtn.classList.contains('call-active');
