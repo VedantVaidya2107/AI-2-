@@ -2003,6 +2003,12 @@ async function playVoice(text) {
             const source = audioContext.createBufferSource();
             source.buffer = buffer;
             source.connect(audioContext.destination);
+            source.onended = () => {
+                const mic = document.getElementById('micBtn');
+                if (mic && !mic.classList.contains('mic-listening')) {
+                    mic.click();
+                }
+            };
             source.start(0);
         }
     } catch (e) {
