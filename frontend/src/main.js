@@ -1077,6 +1077,8 @@ document.getElementById('msgIn').addEventListener('keydown', e => {
 
             socket.onopen = () => {
                 micBtn.classList.add('mic-listening');
+                const wave = document.querySelector('.voice-wave');
+                if (wave) wave.classList.add('active');
                 document.getElementById('msgIn').placeholder = 'Listening…';
 
                 const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
@@ -1127,6 +1129,8 @@ document.getElementById('msgIn').addEventListener('keydown', e => {
     function stopRecording() {
         listening = false;
         micBtn.classList.remove('mic-listening');
+        const wave = document.querySelector('.voice-wave');
+        if (wave) wave.classList.remove('active');
         document.getElementById('msgIn').placeholder = 'Type your response…';
         if (mediaRecorder) mediaRecorder.stop();
         if (socket) socket.close();
@@ -2046,6 +2050,8 @@ async function playVoice(text) {
             for (let i = 0; i < audioData.length; i++) view[i] = audioData.charCodeAt(i);
             
             if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioContext.state === 'suspended') await audioContext.resume();
+            
             const buffer = await audioContext.decodeAudioData(arrayBuffer);
             const source = audioContext.createBufferSource();
             source.buffer = buffer;

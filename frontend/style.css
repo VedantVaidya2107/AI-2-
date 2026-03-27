@@ -693,17 +693,21 @@ body {
 }
 @keyframes flash { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
 
-.voice-wave { display: flex; align-items: center; gap: 3px; height: 14px; }
+.voice-wave { display: flex; align-items: center; gap: 3px; height: 14px; opacity: 0.3; transition: opacity 0.3s; }
+.voice-wave.active { opacity: 1; }
 .voice-wave span {
-    width: 3px; background: var(--orange); border-radius: 2px;
-    animation: wave 1s infinite alternate;
+    width: 3px; background: rgba(255,255,255,0.4); border-radius: 2px;
+    height: 4px;
 }
-.voice-wave.active span { background: #fff; }
-.voice-wave span:nth-child(1) { height: 6px; animation-delay: 0.1s; }
-.voice-wave span:nth-child(2) { height: 14px; animation-delay: 0.2s; }
-.voice-wave span:nth-child(3) { height: 10px; animation-delay: 0.3s; }
-.voice-wave span:nth-child(4) { height: 12px; animation-delay: 0.4s; }
-.voice-wave span:nth-child(5) { height: 7px; animation-delay: 0.5s; }
+.voice-wave.active span {
+    background: var(--orange);
+    animation: wave 0.8s infinite alternate;
+}
+.voice-wave.active span:nth-child(1) { animation-delay: 0.1s; }
+.voice-wave.active span:nth-child(2) { animation-delay: 0.2s; }
+.voice-wave.active span:nth-child(3) { animation-delay: 0.3s; }
+.voice-wave.active span:nth-child(4) { animation-delay: 0.4s; }
+.voice-wave.active span:nth-child(5) { animation-delay: 0.5s; }
 @keyframes wave { from { height: 4px; } to { height: 14px; } }
 
 .chat-feed {
