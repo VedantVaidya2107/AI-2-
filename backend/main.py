@@ -45,6 +45,7 @@ origins = [
     "http://localhost:5174",
     "http://localhost:5175",
     "https://vedantvaidya2107.github.io",
+    "https://vedantvaidya2107.github.io/",
 ]
 
 is_production = os.environ.get("ENV", "development").lower() == "production"
