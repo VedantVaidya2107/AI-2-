@@ -1020,11 +1020,12 @@ document.getElementById('msgIn').addEventListener('keydown', e => {
         if (callingMode) callBtn.classList.add('call-active');
         
         callBtn.onclick = async () => {
-            if (audioContext && audioContext.state === 'suspended') {
-                await audioContext.resume();
-            }
+            if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioContext.state === 'suspended') await audioContext.resume();
+            
             callingMode = !callingMode;
             callBtn.classList.toggle('call-active', callingMode);
+            document.body.classList.toggle('focus-mode-active', callingMode);
             
             const statusEl = document.getElementById('callStatus');
             const panel = document.querySelector('.chat-panel');
@@ -1032,18 +1033,45 @@ document.getElementById('msgIn').addEventListener('keydown', e => {
                 if (statusEl) statusEl.classList.remove('hidden');
                 if (panel) panel.classList.add('calling-mode-active');
                 showToast('Calling Mode: ON (Hands-free)', 'success');
-                // Prompt the last message if we just turned calling mode on
-                const lastAg = Array.from(document.querySelectorAll('.msg.ag')).pop();
-                if (lastAg && lastAg.innerText) {
-                    playVoice(lastAg.innerText);
+                
+                // If empty conversation, start it!
+                if (convo.length === 0) {
+                    addUs("Start the discovery."); // Hidden system-like trigger
+                    convo.push({ role: 'user', content: "Please introduce yourself and start the discovery session." });
+                    const resp = await gem(ZK + "\n\nUser is ready. Start Phase 1.", 1000, 0.7, false, convo);
+                    addAg(resp);
+                    convo.push({ role: 'assistant', content: resp });
+                    playVoice(resp);
+                } else {
+                    // Prompt the last message if we just re-entered
+                    const lastAg = Array.from(document.querySelectorAll('.msg.ag')).pop();
+                    if (lastAg && lastAg.innerText) {
+                        playVoice(lastAg.innerText);
+                    }
                 }
             } else {
                 if (statusEl) statusEl.classList.add('hidden');
                 if (panel) panel.classList.remove('calling-mode-active');
+                document.body.classList.remove('focus-mode-active');
+                
+                // Stop voice if they quit
+                voiceQueue = [];
+                if (currentAudioSource) {
+                    try { currentAudioSource.stop(); } catch(e){}
+                    currentAudioSource = null;
+                }
                 showToast('Calling Mode: OFF (Manual)', 'success');
             }
         };
     }
+
+    // Keyboard shortcut to exit Focus Mode
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && callingMode) {
+            const btn = document.getElementById('callToggleBtn');
+            if (btn) btn.click();
+        }
+    });
 
     async function startRecording() {
         // Step 0: Ensure AudioContext is resumed (browser requirement)

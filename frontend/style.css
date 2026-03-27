@@ -677,15 +677,24 @@ body {
 }
 
 /* ─── Immersive Calling Mode ─── */
-.chat-panel.calling-mode-active .chat-feed,
-.chat-panel.calling-mode-active .chat-input-bar {
+body.focus-mode-active .sidebar,
+body.focus-mode-active .chat-input-bar {
+    display: none !important;
+}
+
+body.focus-mode-active .chat-panel {
+    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+    z-index: 10000; background: var(--bg);
+}
+
+.chat-panel.calling-mode-active .chat-feed {
     opacity: 0 !important; visibility: hidden !important; pointer-events: none !important;
 }
 
 .call-overlay-center {
     position: absolute; top: 0; left: 0; width: 100%; height: 100%;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    z-index: 9999; display: none; background: var(--bg);
+    z-index: 9999; display: none; background: radial-gradient(circle at center, rgba(59,130,246,0.1) 0%, var(--bg) 80%);
 }
 .chat-panel.calling-mode-active .call-overlay-center { display: flex; }
 
