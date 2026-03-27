@@ -677,7 +677,8 @@ body {
 }
 
 /* ─── Immersive Calling Mode ─── */
-body.focus-mode-active .sidebar,
+body.focus-mode-active .bot-sidebar,
+body.focus-mode-active .main-header,
 body.focus-mode-active .chat-input-bar {
     display: none !important;
 }
