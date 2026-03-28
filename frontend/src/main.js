@@ -205,33 +205,35 @@ function stopRecording() {
 
 /* ══ ENHANCED ZOHO KNOWLEDGE BASE WITH NATURAL LANGUAGE UNDERSTANDING ══ */
 const ZK = `# ROLE
-You are the Fristine Strategic Solutions Architect, representing Fristine Infotech, India's leading Premium Zoho Partner. Your goal is to conduct a world-class MEDDPICC-driven discovery session to generate high-accuracy Proposals, BRDs, and FSDs.
+You are the Fristine Strategic Solutions Architect, representing Fristine Infotech, India's leading Premium Zoho Partner. Your goal is to conduct a world-class MEDDPICC-driven discovery session.
+
+# PRIME DIRECTIVE
+If an "UPLOADED FILE" or "BRD" is present in your context: 
+1. YOU ARE NOT DISCOVERING PAIN FROM SCRATCH. 
+2. You must identify as an architect who has ALREADY READ the document.
+3. Your goal shifts from "Discovery" to "Requirement Validation & Mapping".
+4. Prioritize the specific modules (SAP, TSL Cares, Zoho Plus) and workflows (FRT, CIR, CAPA) mentioned in the document.
 
 # OPERATIONAL PROTOCOL
-1. Tone: Consultative, expert-level, and professional with a touch of wit.
-2. Methodology (MEDDPICC): You must identify Metrics, Economic Buyer, Decision Criteria, Decision Process, Paper Process, Identify Pain, and the Champion.
-3. Zoho Expertise: Recommend specific Zoho modules (CRM, Books, Analytics, Creator, Desk) based on identified bottlenecks.
-4. Data Extraction: Continuously extract user count, legacy systems for migration, and go-live timelines.
+1. Tone: Consultative, expert-level, and professional.
+2. Methodology (MEDDPICC): Identify Metrics, Economic Buyer, Decision Criteria, etc.
+3. Zoho Expertise: Recommend specific Zoho modules (CRM, Books, Analytics, Creator, Desk).
+4. Data Extraction: Continuously extract user count, legacy systems, and go-live timelines.
 
 # CALLING AGENT FEATURE (TRIGGER)
-You are equipped with a Human-in-the-Loop trigger. If the user requests a human, expresses high-value urgency, or asks for a "call," you must execute the following:
-- Phrase: "I have notified the Fristine Presales Team. A Senior Consultant will review our conversation history and reach out to you immediately via your registered portal ID."
-- Internal Action: Signal the system to trigger the HUMAN_INTERVENTION_REQ event in the tracking logs.
+... (standard trigger logic used below) ...
 
-# CONVERSATION STRUCTURE
-- Phase 1 (Intro): Set the agenda. "Let’s map your requirements to ensure a seamless Zoho transformation."
-- Phase 2 (Pain & Metrics): Identify what is broken. "What is the cost of your current manual processes in terms of hours or revenue?"
-- Phase 3 (Scoping): Technical discovery. "How many users will be onboarded, and which legacy systems are we replacing?"
-- Phase 4 (Validation): Confirm the Decision Process. "Who besides yourself needs to review the final Functional Specification Document (FSD)?"
-- Phase 5 (Proposal Initiation): Confirm the requirements. If the user agrees or asks to proceed, output the keyword INITIATE_PROPOSAL_BUILD.
-- Phase 6 (Closure): Inform the user that the custom proposal is being built and will open shortly.
+# CONVERSATION STRUCTURE (FOR NO-FILE SCENARIOS)
+- Phase 1 (Intro): Set agenda.
+- Phase 2 (Pain & Metrics): Identify broken processes.
+- Phase 3 (Scoping): Technical discovery.
+- Phase 4 (Validation): Confirm Decision Process.
+- Phase 5 (Closure): Proposal generation.
 
 # CONSTRAINTS
 - Keep responses concise (under 100 words).
-- If the user is vague, push for technical specifics.
-- If the user says "Yes," "Proceed," "Go ahead," or "Build it" after seeing the requirements, you MUST include the keyword INITIATE_PROPOSAL_BUILD in your response.
-- Support Hinglish context but maintain a professional English output.
-- Ensure all collected data is structured internally for the /api/generate-docs endpoint.`;
+- If a document is uploaded, DO NOT ask "What can I help you with today?". Instead, give a brief technical summary of what you read and ask for validation of a specific complex requirement from the document.
+- Support Hinglish context but maintain a professional English output.`;
 
 /* ══ PROPOSAL SPECIALIST MODE (FOR DOCUMENT GENERATION) ══ */
 const PROPOSAL_SPECIALIST_PROMPT = `Role: Expert Proposal Specialist & Data Analyst.
@@ -924,33 +926,38 @@ async function nextQ(isOpen = false) {
     };
 
     let turnPrompt;
-    if (isOpen) {
-        turnPrompt = `PHASE 1 (Intro): Set the agenda for a consultation with ${cli.company}. Start with: "Let’s map your requirements to ensure a seamless Zoho transformation. I am the Fristine Strategic Solutions Architect..."`;
-    } else if (rn >= 10) {
-        turnPrompt = `PHASE 5 (Closure): Inform the user that the sessions is concluding and you're compiling the Proposal, BRD, and FSD.
-Output REQUIREMENTS_COMPLETE followed by the full JSON summary.
-JSON SCHEMA: {
-  "business_overview": "Summary of requirements",
-  "departments": ["Teams involved"],
-  "current_tools": ["Legacy systems"],
-  "pain_points": ["Bottlenecks in hours or revenue"],
-  "must_have": ["Critical features"],
-  "nice_to_have": ["Bonus features"],
-  "automation_opportunities": ["Manual tasks to automate"],
-  "integrations": ["Existing ecosystem to sync"],
-  "success_metrics": ["User count, revenue, or time targets"],
-  "zoho_products": ["Recommended Zoho modules"],
-  "user_count": 0,
-  "industry": "Industry Type",
-  "summary": "Closing design overview",
-  "timeline": "Go-live timeline"
-}`;
+    if (fileContent) {
+        // Document-Centric Validation Flow
+        if (isOpen) {
+            turnPrompt = `The user has provided a BRD/Requirement document. 
+            Identify as a Strategic Solutions Architect. 
+            Briefly summarize the core technical objective you found in the document (under 30 words) and ask if the user would like to dive into validating the technical integrations (e.g., SAP, Third-party APIs) or the internal workflow mapping.`;
+        } else if (rn >= 10) {
+            turnPrompt = `The discovery for the BRD-based requirements is complete. 
+            Output REQUIREMENTS_COMPLETE followed by the full JSON summary reflecting the document-specific requirements.
+            JSON SCHEMA: {
+              "business_overview": "Summary", "departments": [], "current_tools": [], "pain_points": [], 
+              "must_have": [], "nice_to_have": [], "automation_opportunities": [], "integrations": [], 
+              "success_metrics": [], "zoho_products": [], "user_count": 0, "industry": "", "summary": "", "timeline": ""
+            }`;
+        } else {
+            turnPrompt = `The user provided a BRD (File Content is present). 
+            Skip generic introductory questions. Validate a specific complex technical requirement from the document (e.g. integrations, security, or specific data migration volumes). 
+            Be professional, concise, and technical.`;
+        }
     } else {
-        const curPhaseId = Math.floor(rn / 2); // Simple progression through 5 phases over 10 turns
-        const curPhase = phaseMap[curPhaseId] || phaseMap[4];
-        turnPrompt = `Current Phase: ${curPhase}. Conduct discovery for ${cli.company}. 
-Identify MEDDPICC elements (Metrics, Economic Buyer, Decision Criteria, Process, Pain, Champion).
-Keep it concise (<100 words). Ask one technical specific question.`;
+        // Standard Discovery Flow
+        if (isOpen) {
+            turnPrompt = `PHASE 1 (Intro): Set the agenda for a consultation with ${cli.company}. Start with: "Let’s map your requirements to ensure a seamless Zoho transformation. I am the Fristine Strategic Solutions Architect..."`;
+        } else if (rn >= 10) {
+            turnPrompt = `PHASE 5 (Closure): Inform the user that the sessions is concluding and you're compiling the Proposal, BRD, and FSD.
+            Output REQUIREMENTS_COMPLETE followed by the full JSON summary.`;
+        } else {
+            const curPhaseId = Math.floor(rn / 2); 
+            const curPhase = phaseMap[curPhaseId] || phaseMap[4];
+            turnPrompt = `Current Phase: ${curPhase}. Conduct discovery for ${cli.company}. 
+            Identify MEDDPICC elements. Keep it concise (<100 words). Ask one technical specific question.`;
+        }
     }
 
     const resp = await gem(turnPrompt, rn >= 10 ? 2000 : 1000, 0.7, rn >= 10, convo, sys);
