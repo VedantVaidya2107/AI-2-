@@ -90,7 +90,7 @@ async function startRecording() {
             console.log('[Voice] WebSocket OPEN');
             const micBtn = document.getElementById('micBtn');
             if (micBtn) micBtn.classList.add('mic-listening');
-            const waves = document.querySelectorAll('.voice-wave, .large-voice-wave');
+            const waves = document.querySelectorAll('.voice-wave');
             waves.forEach(w => w.classList.add('active'));
             const inp = document.getElementById('msgIn');
             if (inp) inp.placeholder = 'Listening…';
@@ -153,13 +153,23 @@ async function startRecording() {
 
         voiceSocket.onerror = (err) => {
             console.error('[Voice] WebSocket ERROR:', err);
-            stream.getTracks().forEach(t => t.stop());
+            if (globalStream) {
+                globalStream.getTracks().forEach(t => t.stop());
+                globalStream = null;
+            } else {
+                stream.getTracks().forEach(t => t.stop());
+            }
             showToast('Deepgram connection failed.', 'error');
             stopRecording();
         };
     } catch (err) {
         console.error('[Voice] Setup Failed:', err);
-        stream.getTracks().forEach(t => t.stop());
+        if (globalStream) {
+            globalStream.getTracks().forEach(t => t.stop());
+            globalStream = null;
+        } else {
+            stream.getTracks().forEach(t => t.stop());
+        }
         listening = false;
     }
 }
