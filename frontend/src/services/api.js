@@ -205,6 +205,13 @@ export async function gem(prompt, maxTokens = 1000, temp = 0.7, forcePro = false
     if (prompt.includes('PHASE 1') || prompt.includes('Intro')) {
       return `Let's map your requirements to ensure a seamless Zoho transformation. I am the Fristine Strategic Solutions Architect — I'll be guiding you through a quick discovery session to understand your business needs. To start: **what is the single biggest operational bottleneck your team faces today?**`;
     }
+
+    // NEW: Handle Questions in Mock Mode (Fixes Rigidity)
+    const lastUserMsg = (history[history.length-1]?.content || "").toLowerCase();
+    if (lastUserMsg.includes("fristine") || lastUserMsg.includes("who are you") || lastUserMsg.includes("about")) {
+        return `Fristine Infotech is a leading Zoho Premium Partner (since 2014) with offices in Mumbai and Pune. We've successfully completed over 200 Zoho transformations for global clients. Coming back to our discovery... what are your primary goals for this implementation?`;
+    }
+
     // Mid-discovery turns — rotate through MEDDPICC questions
     const questions = [
       `Great insight! To quantify the impact — **how many hours per week does your team spend on manual data entry or reporting?** This helps us size the ROI of automation.`,

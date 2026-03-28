@@ -55,12 +55,27 @@
   --brd:      rgba(15, 23, 42, 0.08);
   --brd2:     rgba(15, 23, 42, 0.12);
   --text:     #0F172A;
-  --sub:      #475569;
-  --dim:      #94A3B8;
+  --sub:      #334155;
+  --dim:      #64748B;
   --agent-bg: #F1F5F9;
   --user-bg:  #EFF6FF;
   --shd:      0 10px 15px -3px rgba(0, 0, 0, 0.1);
   --shd2:     0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+[data-theme="light"] table, 
+[data-theme="light"] th, 
+[data-theme="light"] td, 
+[data-theme="light"] .tbl-co-name,
+[data-theme="light"] .tbl-industry,
+[data-theme="light"] .tbl-email,
+[data-theme="light"] .dash-title,
+[data-theme="light"] .dash-sub,
+[data-theme="light"] .stat-num,
+[data-theme="light"] .stat-lbl {
+  color: var(--text) !important;
+}
+[data-theme="light"] .stat-lbl, [data-theme="light"] .dash-sub {
+  color: var(--sub) !important;
 }
 
 .login-card, .auth-card, .app-header, .bot-header, .stat-card, .section-card, .modal {
@@ -354,6 +369,29 @@ body {
   animation: spin .7s linear infinite;
 }
 .forgot-row { text-align: center; margin-top: 14px; }
+
+/* Captcha & Registration Styles */
+.captcha-row {
+    display: flex; gap: 10px; align-items: center;
+    margin-top: 8px; padding: 10px; background: var(--bg);
+    border-radius: var(--r-sm); border: 1.5px solid var(--brd);
+}
+.captcha-box {
+    font-family: var(--mono); font-weight: 700; font-size: 16px;
+    color: var(--orange); background: var(--navy); padding: 5px 12px;
+    border-radius: 6px; user-select: none; letter-spacing: 2px;
+}
+.captcha-input {
+    flex: 1; background: transparent; border: none;
+    border-bottom: 2px solid var(--brd); color: var(--text);
+    padding: 2px 0; outline: none; font-size: 14px; transition: border-color .2s;
+}
+.captcha-input:focus { border-color: var(--orange); }
+
+.signup-row {
+    text-align: center; margin-top: 24px; font-size: 13px; color: var(--dim);
+}
+.signup-row .link-btn { font-weight: 700; }
 
 /* ─── Forms ─── */
 .field { margin-bottom: 16px; }
@@ -706,6 +744,11 @@ body.focus-mode-active .chat-panel {
     transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     opacity: 0; pointer-events: none;
     box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
+[data-theme="light"] .exit-call-btn {
+    background: rgba(15, 23, 42, 0.1);
+    border-color: rgba(15, 23, 42, 0.2);
+    color: var(--navy);
 }
 
 body.focus-mode-active .exit-call-btn {

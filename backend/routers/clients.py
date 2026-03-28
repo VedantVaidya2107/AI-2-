@@ -24,8 +24,12 @@ async def generate_client_id():
 
 @router.get("/")
 async def get_clients():
-    res = supabase.table("clients").select("*").order("created_at", desc=True).execute()
-    return res.data or []
+    try:
+        res = supabase.table("clients").select("*").order("created_at", desc=True).execute()
+        return res.data or []
+    except Exception as e:
+        print(f"[Backend Error] Clients GET failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/next-id")
 async def get_next_id():

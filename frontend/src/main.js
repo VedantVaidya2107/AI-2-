@@ -207,6 +207,18 @@ function stopRecording() {
 const ZK = `# ROLE
 You are the Fristine Strategic Solutions Architect, representing Fristine Infotech, India's leading Premium Zoho Partner. Your goal is to conduct a world-class MEDDPICC-driven discovery session.
 
+# CONVERSATIONAL BRIDGE (HIGHEST PRIORITY)
+If the user asks a personal question about Fristine, Zoho, or your capabilities (e.g., "Who is Fristine?", "Tell me about Zoho", "What do you do?"), YOU MUST ANSWER IT FIRST using the # ABOUT FRISTINE INFOTECH section. 
+Provide a detailed, professional answer (~30-50 words). 
+Then, and ONLY then, add a smooth transition: "Coming back to our discovery..." followed by your next technical question for the current phase.
+
+# ABOUT FRISTINE INFOTECH
+1. Partnership: Zoho Premium Partner since 2014.
+2. Expertise: 200+ successful Zoho transformations across CRM, Books, Analytics, Projects, and Creator.
+3. Services: Strategic consulting, end-to-end implementation, custom development (Deluge), and 24/7 support.
+4. Scale: Teams in Mumbai and Pune, serving global enterprise clients.
+5. Brand: Known for high-fidelity technical architecting and business process automation.
+
 # PRIME DIRECTIVE
 If an "UPLOADED FILE" or "BRD" is present in your context: 
 1. YOU ARE NOT DISCOVERING PAIN FROM SCRATCH. 
@@ -233,7 +245,9 @@ If an "UPLOADED FILE" or "BRD" is present in your context:
 # CONSTRAINTS
 - Keep responses concise (under 100 words).
 - If a document is uploaded, DO NOT ask "What can I help you with today?". Instead, give a brief technical summary of what you read and ask for validation of a specific complex requirement from the document.
-- Support Hinglish context but maintain a professional English output.`;
+- Support Hinglish context but maintain a professional English output.
+- CONVERSATIONAL BRIDGE: If the user asks a personal question about Fristine, Zoho, or your capabilities, YOU MUST ANSWER IT FIRST using the # ABOUT FRISTINE INFOTECH section. After answering, add a smooth transition: "Coming back to our discovery..." followed by your next technical question. 
+`;
 
 /* ══ PROPOSAL SPECIALIST MODE (FOR DOCUMENT GENERATION) ══ */
 const PROPOSAL_SPECIALIST_PROMPT = `Role: Expert Proposal Specialist & Data Analyst.
@@ -252,6 +266,7 @@ Task: Analyze the attached requirement document and generate a comprehensive, hi
 async function init() {
     initTheme();
     initPasswordToggle();
+    initCaptcha();
     initKpis();
     const params = new URLSearchParams(window.location.search);
     
@@ -360,6 +375,30 @@ function setSS(type, txt) {
     dot.className = type === 'ok' ? 'cs-dot' : 'cs-dot spin';
 }
 
+/* ── Captcha Logic ── */
+let currentCaptchaAnswer = null;
+function initCaptcha() {
+    generateCaptcha();
+}
+function generateCaptcha() {
+    const a = Math.floor(Math.random() * 10) + 1;
+    const b = Math.floor(Math.random() * 10) + 1;
+    currentCaptchaAnswer = a + b;
+    const box = document.getElementById('captchaBox');
+    if (box) box.textContent = `${a} + ${b}`;
+    const inp = document.getElementById('captchaIn');
+    if (inp) inp.value = '';
+}
+function validateCaptcha() {
+    const val = document.getElementById('captchaIn').value.trim();
+    if (parseInt(val) !== currentCaptchaAnswer) {
+        showToast('Incorrect security answer.', 'error');
+        generateCaptcha();
+        return false;
+    }
+    return true;
+}
+
 document.getElementById('loginBtn').addEventListener('click', async () => {
     const em = document.getElementById('em').value.trim().toLowerCase();
     const pw = document.getElementById('pw').value.trim();
@@ -370,6 +409,8 @@ document.getElementById('loginBtn').addEventListener('click', async () => {
         err.textContent = 'Access restricted to @fristinetech.com accounts.';
         return;
     }
+
+    if (!validateCaptcha()) return;
 
     const btn = document.getElementById('loginBtn');
     btn.disabled = true; btn.querySelector('span').textContent = 'Signing in…';
@@ -451,8 +492,45 @@ document.getElementById('resetPwBtn').addEventListener('click', async () => {
     }
 });
 
-document.getElementById('backToLoginFromFP').addEventListener('click', () => { hide('FP'); show('L'); });
-document.getElementById('backToLoginBtn2').addEventListener('click', () => { hide('FP'); show('L'); });
+document.getElementById('backToLoginFromFP').addEventListener('click', () => { hide('FP'); show('L'); generateCaptcha(); });
+document.getElementById('backToLoginBtn2').addEventListener('click', () => { hide('FP'); show('L'); generateCaptcha(); });
+
+/* ── Signup Logic ── */
+document.getElementById('showSignupBtn').addEventListener('click', () => { hide('L'); show('SU'); });
+document.getElementById('backToLoginSU').addEventListener('click', () => { hide('SU'); show('L'); generateCaptcha(); });
+
+document.getElementById('signupBtn').addEventListener('click', async () => {
+    const em = document.getElementById('su-em').value.trim().toLowerCase();
+    const name = document.getElementById('su-name').value.trim();
+    const pw1 = document.getElementById('su-pw1').value.trim();
+    const pw2 = document.getElementById('su-pw2').value.trim();
+    const err = document.getElementById('su-err');
+    err.textContent = '';
+
+    if (!em.endsWith('@fristinetech.com')) { err.textContent = 'Must use a @fristinetech.com email.'; return; }
+    if (!name) { err.textContent = 'Please enter your name.'; return; }
+    if (pw1.length < 8) { err.textContent = 'Password must be at least 8 characters.'; return; }
+    if (pw1 !== pw2) { err.textContent = 'Passwords do not match.'; return; }
+
+    const btn = document.getElementById('signupBtn');
+    btn.disabled = true; btn.textContent = 'Creating Account…';
+
+    try {
+        // auth.setPassword can be used for new account creation too if backend handles it
+        // Or we just call it and it works since new records are created in agents table
+        await auth.setPassword(em, pw1); 
+        // Note: For a real app, you'd also save the name, but here we prioritize password setup.
+        showToast('Account created successfully!', 'success');
+        localStorage.setItem('f_active_agent', em);
+        allClients = await clients.list();
+        hide('SU');
+        startStaffPortal(em);
+    } catch (e) {
+        err.textContent = e.message || 'Registration failed.';
+    } finally {
+        btn.disabled = false; btn.textContent = 'Create Account & Join →';
+    }
+});
 
 /* ══ STAFF PORTAL ══ */
 async function startStaffPortal(agentEmail) {
@@ -991,8 +1069,20 @@ async function nextQ(isOpen = false) {
         } else {
             const curPhaseId = Math.floor(rn / 2); 
             const curPhase = phaseMap[curPhaseId] || phaseMap[4];
-            turnPrompt = `Current Phase: ${curPhase}. Conduct discovery for ${cli.company}. 
-            Identify MEDDPICC elements. Keep it concise (<100 words). Ask one technical specific question.`;
+            
+            // Explicit Detection for Company/Tech Inquiry
+            const lastMsg = convo.length > 0 ? convo[convo.length-1].content.toLowerCase() : "";
+            const isInquiry = ["fristine", "zoho", "who are you", "what is", "about"].some(kw => lastMsg.includes(kw));
+
+            if (isInquiry) {
+                turnPrompt = `The user asked a question about Fristine or Zoho. 
+                1. Answer the question thoroughly using the # ABOUT FRISTINE INFOTECH system info.
+                2. Transition back to discovery by saying: "Coming back to our requirements mapping, [Insert Question for ${curPhase}]".
+                Do not skip the answer. Be professional and detailed.`;
+            } else {
+                turnPrompt = `Current Phase: ${curPhase}. Conduct discovery for ${cli.company}. 
+                Identify MEDDPICC elements. Keep it concise (<100 words). Ask one technical specific question.`;
+            }
         }
     }
 

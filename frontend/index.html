@@ -87,11 +87,19 @@
                             </button>
                         </div>
                     </div>
+                    <div class="field" id="captchaField">
+                        <label>Security Check</label>
+                        <div class="captcha-row">
+                            <div class="captcha-box" id="captchaBox">8 + 5</div>
+                            <input type="text" id="captchaIn" class="captcha-input" placeholder="Result?" autocomplete="off"/>
+                        </div>
+                    </div>
                     <button class="btn-primary w-full" id="loginBtn">
                         <span>Sign In</span>
                         <svg viewBox="0 0 20 20" fill="none" width="16" height="16"><path d="M4 10h12M11 5l5 5-5 5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     </button>
                     <div class="forgot-row"><button id="forgotLink" class="link-btn">Forgot Password?</button></div>
+                    <div class="signup-row">New part of the team? <button id="showSignupBtn" class="link-btn">Join as Agent</button></div>
                     <div class="field-error" id="lerr"></div>
                 </div>
             </div>
@@ -161,6 +169,46 @@
                 <button class="btn-primary" id="backToLoginFromFP">Sign In →</button>
             </div>
             <button id="backToLoginBtn2" class="link-btn mt-12">← Back to Sign In</button>
+        </div>
+    </div>
+
+    <!-- ══ SCREEN: SIGN UP ══ -->
+    <div id="SU" class="screen hidden auth-screen">
+        <div class="auth-card">
+            <div class="auth-icon"><svg viewBox="0 0 24 24" fill="none" width="40" height="40"><circle cx="12" cy="8" r="4" stroke="var(--orange)" stroke-width="1.8"/><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" stroke="var(--orange)" stroke-width="1.8" stroke-linecap="round"/></svg></div>
+            <h2>Join as Agent</h2>
+            <p class="auth-sub">Create your account to start managing leads.</p>
+            <div class="field">
+                <label>Email Address</label>
+                <div class="input-wrap">
+                    <svg class="input-icon" viewBox="0 0 20 20" fill="none" width="20" height="20"><path d="M3 5l7 5 7-5M3 5h14v10H3V5z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <input type="email" id="su-em" placeholder="your@fristinetech.com"/>
+                </div>
+            </div>
+            <div class="field">
+                <label>Your Name</label>
+                <div class="input-wrap">
+                    <svg class="input-icon" viewBox="0 0 20 20" fill="none" width="20" height="20"><path d="M10 10a4 4 0 100-8 4 4 0 000 8z" stroke="currentColor" stroke-width="1.3"/><path d="M18 18c0-2.8-2.6-5-8-5s-8 2.2-8 5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+                    <input type="text" id="su-name" placeholder="Full name"/>
+                </div>
+            </div>
+            <div class="field">
+                <label>Create Password</label>
+                <div class="input-wrap">
+                    <svg class="input-icon" viewBox="0 0 20 20" fill="none" width="20" height="20"><rect x="3" y="9" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M7 9V6a3 3 0 016 0v3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                    <input type="password" id="su-pw1" placeholder="Minimum 8 characters"/>
+                </div>
+            </div>
+            <div class="field">
+                <label>Confirm Password</label>
+                <div class="input-wrap">
+                    <svg class="input-icon" viewBox="0 0 20 20" fill="none" width="20" height="20"><rect x="3" y="9" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M7 9V6a3 3 0 016 0v3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                    <input type="password" id="su-pw2" placeholder="Re-enter password"/>
+                </div>
+            </div>
+            <button class="btn-primary w-full" id="signupBtn">Create Account & Join →</button>
+            <button class="btn-ghost w-full mt-12" id="backToLoginSU">← Back to Sign In</button>
+            <div class="field-error" id="su-err"></div>
         </div>
     </div>
 
