@@ -25,6 +25,11 @@ let currentAudioSource = null;
 let voiceQueue = [];
 let isProcessingVoice = false;
 
+// Unified Voice State (Lifting for Calling Mode coordination)
+let voiceSocket = null;
+let mediaRecorder = null;
+let listening = false;
+
 
 /* ══ ENHANCED ZOHO KNOWLEDGE BASE WITH NATURAL LANGUAGE UNDERSTANDING ══ */
 const ZK = `# ROLE
@@ -1006,13 +1011,9 @@ document.getElementById('msgIn').addEventListener('keydown', e => {
 });
 
 /* ══ DEEPGRAM VOICE INTEGRATION ══ */
-(function initDeepgramMic() {
+function initVoiceSystem() {
     const micBtn = document.getElementById('micBtn');
     if (!micBtn) return;
-    
-    let socket = null;
-    let mediaRecorder = null;
-    let listening = false;
     // Removed local callingMode let shadowing global state
 
     const callBtn = document.getElementById('callToggleBtn');
@@ -1092,6 +1093,34 @@ document.getElementById('msgIn').addEventListener('keydown', e => {
         }
     });
 
+    async function setMicState(active) {
+        if (active) {
+            if (!listening) {
+                listening = true;
+                document.getElementById('msgIn').value = '';
+                await startRecording();
+            }
+        } else {
+            if (listening) {
+                stopRecording();
+            }
+        }
+    }
+
+    async function setMicState(active) {
+        if (active) {
+            if (!listening) {
+                listening = true;
+                document.getElementById('msgIn').value = '';
+                await startRecording();
+            }
+        } else {
+            if (listening) {
+                stopRecording();
+            }
+        }
+    }
+
     async function startRecording() {
         // Step 0: Ensure AudioContext is resumed (browser requirement)
         if (audioContext && audioContext.state === 'suspended') {
@@ -1131,12 +1160,12 @@ document.getElementById('msgIn').addEventListener('keydown', e => {
 
         // Step 3: Connect to Deepgram WebSocket
         try {
-            socket = new WebSocket(
+            voiceSocket = new WebSocket(
                 'wss://api.deepgram.com/v1/listen?interim_results=true&punctuate=true&language=en-IN',
                 ['token', key]
             );
 
-            socket.onopen = () => {
+            voiceSocket.onopen = () => {
                 micBtn.classList.add('mic-listening');
                 const waves = document.querySelectorAll('.voice-wave, .large-voice-wave');
                 waves.forEach(w => w.classList.add('active'));
@@ -1150,14 +1179,14 @@ document.getElementById('msgIn').addEventListener('keydown', e => {
 
                 mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
                 mediaRecorder.addEventListener('dataavailable', async (event) => {
-                    if (event.data.size > 0 && socket.readyState === WebSocket.OPEN) {
-                        socket.send(event.data);
+                    if (event.data.size > 0 && voiceSocket.readyState === WebSocket.OPEN) {
+                        voiceSocket.send(event.data);
                     }
                 });
                 mediaRecorder.start(250);
             };
 
-            socket.onmessage = (message) => {
+            voiceSocket.onmessage = (message) => {
                 const received = JSON.parse(message.data);
                 const transcript = received.channel.alternatives[0].transcript;
                 if (transcript && received.is_final) {
@@ -1167,18 +1196,17 @@ document.getElementById('msgIn').addEventListener('keydown', e => {
                 }
             };
 
-            socket.onclose = () => {
+            voiceSocket.onclose = () => {
                 stream.getTracks().forEach(t => t.stop());
                 stopRecording();
             };
 
-            socket.onerror = (err) => {
+            voiceSocket.onerror = (err) => {
                 console.error('[Deepgram Socket Error]', err);
                 stream.getTracks().forEach(t => t.stop());
                 showToast('Deepgram connection failed — check API key or try again.', 'error');
                 stopRecording();
             };
-
         } catch (err) {
             console.error('[WebSocket Error]', err);
             stream.getTracks().forEach(t => t.stop());
@@ -1189,21 +1217,24 @@ document.getElementById('msgIn').addEventListener('keydown', e => {
 
     function stopRecording() {
         listening = false;
-        micBtn.classList.remove('mic-listening');
+        const mic = document.getElementById('micBtn');
+        if (mic) mic.classList.remove('mic-listening');
         const waves = document.querySelectorAll('.voice-wave, .large-voice-wave');
         waves.forEach(w => w.classList.remove('active'));
-        document.getElementById('msgIn').placeholder = 'Type your response…';
-        if (mediaRecorder) mediaRecorder.stop();
-        if (socket) socket.close();
+        const inp = document.getElementById('msgIn');
+        if (inp) inp.placeholder = 'Type your response…';
         
+        if (mediaRecorder) { try { mediaRecorder.stop(); } catch(e){} mediaRecorder = null; }
+        if (voiceSocket)   { try { voiceSocket.close(); } catch(e){} voiceSocket = null; }
+
         // Auto-send if there's any content and callingMode is ON
-        const val = document.getElementById('msgIn').value.trim();
+        const val = inp?.value.trim() || '';
         if (callingMode && val.length > 0) {
             setTimeout(() => {
                 if (document.getElementById('msgIn').value.trim() === val) {
-                   document.getElementById('sendBtn').click();
+                    document.getElementById('sendBtn').click();
                 }
-            }, 1500);
+            }, 1000);
         }
     }
 
@@ -1215,15 +1246,11 @@ document.getElementById('msgIn').addEventListener('keydown', e => {
             currentAudioSource = null;
         }
         if (discoveryComplete) return;
-        if (listening) {
-            stopRecording();
-        } else {
-            listening = true;
-            document.getElementById('msgIn').value = '';
-            startRecording();
-        }
+        setMicState(!listening);
     });
-})();
+}
+
+initVoiceSystem();
 
 /* ══ CONVERSATION MEMORY ══ */
 function saveConversationMemory() {
@@ -2158,13 +2185,12 @@ async function processVoiceQueue() {
                     currentAudioSource = null;
                     waves.forEach(w => w.classList.remove('active'));
                     
-                    const mic = document.getElementById('micBtn');
-                    const callBtn = document.getElementById('callToggleBtn');
-                    if (callingMode && mic && !mic.classList.contains('mic-listening')) {
-                        mic.click();
+                    if (callingMode && voiceQueue.length === 0) {
+                        // Use the shared setMicState function for stability
+                        setMicState(true); 
                     }
                 }
-                processVoiceQueue(); // Handle next in queue
+                processVoiceQueue(); 
             };
             source.start(0);
         } else {
