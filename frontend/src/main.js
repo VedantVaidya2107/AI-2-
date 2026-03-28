@@ -25,10 +25,159 @@ let currentAudioSource = null;
 let voiceQueue = [];
 let isProcessingVoice = false;
 
-// Unified Voice State (Lifting for Calling Mode coordination)
 let voiceSocket = null;
 let mediaRecorder = null;
 let listening = false;
+let globalStream = null; // Persistent stream for hands-free loop
+let speechTimeout = null; // VAD auto-send timeout
+
+/* ══ GLOBAL VOICE HELPERS ══ */
+async function setMicState(active) {
+    if (active) {
+        if (!listening) {
+            listening = true;
+            const inp = document.getElementById('msgIn');
+            if (inp) inp.value = '';
+            await startRecording();
+        }
+    } else {
+        if (listening) {
+            stopRecording();
+        }
+    }
+}
+
+async function startRecording() {
+    // Step 0: Ensure AudioContext is resumed (browser requirement)
+    if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+    }
+
+    // Step 1: Get mic access (Persist if already granted)
+    if (!globalStream) {
+        try {
+            globalStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            console.log('[Voice] Stream Captured Successfully');
+        } catch (err) {
+            console.error('[Mic Permission]', err);
+            showToast('Microphone access denied.', 'error');
+            listening = false;
+            return;
+        }
+    }
+    const stream = globalStream;
+
+    // Step 2: Get Deepgram key
+    let key;
+    try {
+        showToast('Connecting to voice service…', 'success');
+        const dgData = await voice.getKey();
+        key = dgData.key;
+        if (!key || key === 'mock-key') throw new Error('No valid key from backend');
+    } catch (err) {
+        key = import.meta.env.VITE_DEEPGRAM_KEY || '6e712ff0167128210a0dae3fc2fcda370858fc7e';
+    }
+
+    // Step 3: Connect to Deepgram WebSocket
+    try {
+        console.log('[Voice] Opening WebSocket...');
+        voiceSocket = new WebSocket(
+            'wss://api.deepgram.com/v1/listen?interim_results=true&punctuate=true&language=en-IN&endpointing=500',
+            ['token', key]
+        );
+
+        voiceSocket.onopen = () => {
+            console.log('[Voice] WebSocket OPEN');
+            const micBtn = document.getElementById('micBtn');
+            if (micBtn) micBtn.classList.add('mic-listening');
+            const waves = document.querySelectorAll('.voice-wave, .large-voice-wave');
+            waves.forEach(w => w.classList.add('active'));
+            const inp = document.getElementById('msgIn');
+            if (inp) inp.placeholder = 'Listening…';
+
+            const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+                ? 'audio/webm;codecs=opus'
+                : MediaRecorder.isTypeSupported('audio/webm')
+                ? 'audio/webm'
+                : '';
+
+            mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+            mediaRecorder.addEventListener('dataavailable', async (event) => {
+                if (event.data.size > 0 && voiceSocket && voiceSocket.readyState === WebSocket.OPEN) {
+                    voiceSocket.send(event.data);
+                }
+            });
+            console.log('[Voice] MediaRecorder START');
+            mediaRecorder.start(250);
+        };
+
+        voiceSocket.onmessage = (message) => {
+            const received = JSON.parse(message.data);
+            const transcript = received.channel.alternatives[0].transcript;
+            
+            const inp = document.getElementById('msgIn');
+            if (transcript && received.is_final && inp) {
+                inp.value += transcript + ' ';
+            } else if (transcript && inp) {
+                inp.placeholder = transcript + '...';
+            }
+            
+            // Auto-send Voice Activity Detection (VAD)
+            if (callingMode) {
+                if (transcript) {
+                    clearTimeout(speechTimeout);
+                    speechTimeout = setTimeout(() => {
+                        if (inp?.value.trim().length > 0) {
+                            console.log('[Voice] VAD Timeout triggers send.');
+                            stopRecording();
+                            document.getElementById('sendBtn').click();
+                        }
+                    }, 2000); // 2 seconds of silence fallback
+                }
+                
+                if (received.speech_final && inp?.value.trim().length > 0) {
+                    clearTimeout(speechTimeout);
+                    console.log('[Voice] Deepgram Endpointing triggers send.');
+                    stopRecording();
+                    document.getElementById('sendBtn').click();
+                }
+            } else {
+                if (transcript) console.log('[Voice] Transcript:', transcript);
+            }
+        };
+
+        voiceSocket.onclose = () => {
+            console.log('[Voice] WebSocket CLOSE');
+            stopRecording();
+        };
+
+        voiceSocket.onerror = (err) => {
+            console.error('[Voice] WebSocket ERROR:', err);
+            stream.getTracks().forEach(t => t.stop());
+            showToast('Deepgram connection failed.', 'error');
+            stopRecording();
+        };
+    } catch (err) {
+        console.error('[Voice] Setup Failed:', err);
+        stream.getTracks().forEach(t => t.stop());
+        listening = false;
+    }
+}
+
+function stopRecording() {
+    listening = false;
+    clearTimeout(speechTimeout);
+    
+    const mic = document.getElementById('micBtn');
+    if (mic) mic.classList.remove('mic-listening');
+    const waves = document.querySelectorAll('.voice-wave, .large-voice-wave');
+    waves.forEach(w => w.classList.remove('active'));
+    const inp = document.getElementById('msgIn');
+    if (inp) inp.placeholder = 'Type your response…';
+    
+    if (mediaRecorder) { try { mediaRecorder.stop(); } catch(e){} mediaRecorder = null; }
+    if (voiceSocket)   { try { voiceSocket.close(); } catch(e){} voiceSocket = null; }
+}
 
 
 /* ══ ENHANCED ZOHO KNOWLEDGE BASE WITH NATURAL LANGUAGE UNDERSTANDING ══ */
@@ -1014,20 +1163,26 @@ document.getElementById('msgIn').addEventListener('keydown', e => {
 function initVoiceSystem() {
     const micBtn = document.getElementById('micBtn');
     if (!micBtn) return;
-    // Removed local callingMode let shadowing global state
 
-    const callBtn = document.getElementById('callToggleBtn');
-    if (callBtn) {
-        // Init state
-        if (callingMode) callBtn.classList.add('call-active');
-        
-        // New structure for callBtn and exitBtn
-        document.getElementById('callToggleBtn').onclick = async () => {
+    const callToggleBtn = document.getElementById('callToggleBtn');
+    if (callToggleBtn) {
+        callToggleBtn.onclick = async () => {
             if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
             if (audioContext.state === 'suspended') await audioContext.resume();
             
+            if (!callingMode && !globalStream) {
+                try {
+                    globalStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    console.log('[Voice] Initial Stream Captured on Gesture');
+                } catch (err) {
+                    console.error('[Mic Permission]', err);
+                    showToast('Microphone access denied.', 'error');
+                    return; // Cannot enter calling mode without mic
+                }
+            }
+            
             callingMode = !callingMode;
-            await toggleCallingMode(); // Shared logic
+            await toggleCallingMode();
         };
 
         const exitBtn = document.getElementById('exitCallBtn');
@@ -1042,11 +1197,11 @@ function initVoiceSystem() {
 
         async function toggleCallingMode() {
             const btn = document.getElementById('callToggleBtn');
-            btn.classList.toggle('call-active', callingMode); // Use call-active class
+            if (btn) btn.classList.toggle('call-active', callingMode);
             document.body.classList.toggle('focus-mode-active', callingMode);
             
             const panel = document.querySelector('.chat-panel');
-            panel.classList.toggle('calling-mode-active', callingMode);
+            if (panel) panel.classList.toggle('calling-mode-active', callingMode);
             
             const statusEl = document.getElementById('callStatus');
             if (statusEl) statusEl.classList.toggle('hidden', !callingMode);
@@ -1054,8 +1209,6 @@ function initVoiceSystem() {
             if (callingMode) {
                 console.log('[Focus Mode] ACTIVE');
                 showToast('Calling Mode: ON (Hands-free)', 'success');
-                
-                // If empty conversation, start it!
                 if (convo.length === 0) {
                     addUs("Start the discovery.");
                     convo.push({ role: 'user', content: "Please introduce yourself and start the discovery session." });
@@ -1063,183 +1216,30 @@ function initVoiceSystem() {
                     convo.push({ role: 'assistant', content: resp });
                     addAg(resp);
                 } else {
-                    // Context-aware re-entry for "Trained" feel
-                    const progressNudge = `[SYSTEM: User has switched to VOICE/CALL mode. Current Progress: ${rn}/10. Current Client: ${cli?.company || 'Unknown'}. ${fileContent ? 'A document is uploaded.' : ''} Welcome them back to the voice discovery and continue from where we left off naturally.]`;
+                    const progressNudge = `[SYSTEM: Voice mode active. Progress: ${rn}/10. Continue naturally.]`;
                     const resp = await gem(ZK + "\n\n" + progressNudge, 1000, 0.7, false, convo);
                     convo.push({ role: 'assistant', content: resp });
                     addAg(resp);
                 }
             } else {
-                if (statusEl) statusEl.classList.add('hidden');
-                if (panel) panel.classList.remove('calling-mode-active');
-                document.body.classList.remove('focus-mode-active');
-                
-                // Stop voice if they quit
                 voiceQueue = [];
                 if (currentAudioSource) {
                     try { currentAudioSource.stop(); } catch(e){}
                     currentAudioSource = null;
                 }
+                // Teardown persistent stream when quitting Focus Mode
+                if (globalStream) {
+                    globalStream.getTracks().forEach(t => t.stop());
+                    globalStream = null;
+                    console.log('[Voice] Global Stream Stopped');
+                }
+                setMicState(false);
                 showToast('Calling Mode: OFF (Manual)', 'success');
             }
-        };
-    }
-
-    // Keyboard shortcut to exit Focus Mode
-    window.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && callingMode) {
-            const btn = document.getElementById('callToggleBtn');
-            if (btn) btn.click();
-        }
-    });
-
-    async function setMicState(active) {
-        if (active) {
-            if (!listening) {
-                listening = true;
-                document.getElementById('msgIn').value = '';
-                await startRecording();
-            }
-        } else {
-            if (listening) {
-                stopRecording();
-            }
         }
     }
 
-    async function setMicState(active) {
-        if (active) {
-            if (!listening) {
-                listening = true;
-                document.getElementById('msgIn').value = '';
-                await startRecording();
-            }
-        } else {
-            if (listening) {
-                stopRecording();
-            }
-        }
-    }
-
-    async function startRecording() {
-        // Step 0: Ensure AudioContext is resumed (browser requirement)
-        if (audioContext && audioContext.state === 'suspended') {
-            await audioContext.resume();
-        }
-
-        // Step 1: Get mic access
-        let stream;
-        try {
-            stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        } catch (err) {
-            console.error('[Mic Permission]', err);
-            showToast('Microphone access denied — please allow mic permissions in your browser.', 'error');
-            listening = false;
-            return;
-        }
-
-        // Step 2: Get Deepgram key (try backend first, fallback to env, then hardcoded)
-        let key;
-        try {
-            showToast('Connecting to voice service…', 'success');
-            const dgData = await voice.getKey();
-            key = dgData.key;
-            if (!key || key === 'mock-key') throw new Error('No valid key from backend');
-        } catch (err) {
-            // Fallback 1: Vite env var
-            key = import.meta.env.VITE_DEEPGRAM_KEY || null;
-            
-            // Fallback 2: Hardcoded static key (guaranteed to work if others fail)
-            if (!key) {
-                key = '6e712ff0167128210a0dae3fc2fcda370858fc7e';
-                console.log('[Voice] Using hardcoded fallback key');
-            } else {
-                console.log('[Voice] Using embedded Deepgram key from build env');
-            }
-        }
-
-        // Step 3: Connect to Deepgram WebSocket
-        try {
-            voiceSocket = new WebSocket(
-                'wss://api.deepgram.com/v1/listen?interim_results=true&punctuate=true&language=en-IN',
-                ['token', key]
-            );
-
-            voiceSocket.onopen = () => {
-                micBtn.classList.add('mic-listening');
-                const waves = document.querySelectorAll('.voice-wave, .large-voice-wave');
-                waves.forEach(w => w.classList.add('active'));
-                document.getElementById('msgIn').placeholder = 'Listening…';
-
-                const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-                    ? 'audio/webm;codecs=opus'
-                    : MediaRecorder.isTypeSupported('audio/webm')
-                    ? 'audio/webm'
-                    : '';
-
-                mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
-                mediaRecorder.addEventListener('dataavailable', async (event) => {
-                    if (event.data.size > 0 && voiceSocket.readyState === WebSocket.OPEN) {
-                        voiceSocket.send(event.data);
-                    }
-                });
-                mediaRecorder.start(250);
-            };
-
-            voiceSocket.onmessage = (message) => {
-                const received = JSON.parse(message.data);
-                const transcript = received.channel.alternatives[0].transcript;
-                if (transcript && received.is_final) {
-                    document.getElementById('msgIn').value += transcript + ' ';
-                } else if (transcript) {
-                    document.getElementById('msgIn').placeholder = transcript + '...';
-                }
-            };
-
-            voiceSocket.onclose = () => {
-                stream.getTracks().forEach(t => t.stop());
-                stopRecording();
-            };
-
-            voiceSocket.onerror = (err) => {
-                console.error('[Deepgram Socket Error]', err);
-                stream.getTracks().forEach(t => t.stop());
-                showToast('Deepgram connection failed — check API key or try again.', 'error');
-                stopRecording();
-            };
-        } catch (err) {
-            console.error('[WebSocket Error]', err);
-            stream.getTracks().forEach(t => t.stop());
-            showToast('Could not connect to Deepgram voice service.', 'error');
-            listening = false;
-        }
-    }
-
-    function stopRecording() {
-        listening = false;
-        const mic = document.getElementById('micBtn');
-        if (mic) mic.classList.remove('mic-listening');
-        const waves = document.querySelectorAll('.voice-wave, .large-voice-wave');
-        waves.forEach(w => w.classList.remove('active'));
-        const inp = document.getElementById('msgIn');
-        if (inp) inp.placeholder = 'Type your response…';
-        
-        if (mediaRecorder) { try { mediaRecorder.stop(); } catch(e){} mediaRecorder = null; }
-        if (voiceSocket)   { try { voiceSocket.close(); } catch(e){} voiceSocket = null; }
-
-        // Auto-send if there's any content and callingMode is ON
-        const val = inp?.value.trim() || '';
-        if (callingMode && val.length > 0) {
-            setTimeout(() => {
-                if (document.getElementById('msgIn').value.trim() === val) {
-                    document.getElementById('sendBtn').click();
-                }
-            }, 1000);
-        }
-    }
-
-    micBtn.addEventListener('click', () => {
-        // Stop agent talking and clear queue if user takes the mic
+    micBtn.onclick = () => {
         voiceQueue = [];
         if (currentAudioSource) {
             try { currentAudioSource.stop(); } catch(e){}
@@ -1247,6 +1247,13 @@ function initVoiceSystem() {
         }
         if (discoveryComplete) return;
         setMicState(!listening);
+    };
+
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && callingMode) {
+            const btn = document.getElementById('callToggleBtn');
+            if (btn) btn.click();
+        }
     });
 }
 
@@ -2089,6 +2096,15 @@ function mdToHtml(text) {
 }
 
 function addAg(msg, opts = {}) {
+    // Trigger TTS if calling mode is ON and not a restored message
+    if (callingMode && !opts.restored) {
+        playVoice(msg);
+    }
+    
+    if (callingMode) {
+        saveConversationMemory();
+        return;
+    }
     const f = document.getElementById('feed');
     const d = document.createElement('div');
     d.className = 'msg ag';
@@ -2124,11 +2140,6 @@ function addAg(msg, opts = {}) {
     f.appendChild(d);
     f.scrollTop = f.scrollHeight;
     saveConversationMemory();
-
-    // Trigger TTS if calling mode is ON and not a restored message
-    if (callingMode && !opts.restored) {
-        playVoice(msg);
-    }
 }
 
 
@@ -2209,6 +2220,10 @@ function escHtml(str) {
 }
 
 function addUs(msg) {
+    if (callingMode) {
+        saveConversationMemory();
+        return;
+    }
     const f = document.getElementById('feed');
     const d = document.createElement('div');
     d.className = 'msg u';
