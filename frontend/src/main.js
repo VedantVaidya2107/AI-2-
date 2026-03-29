@@ -2005,36 +2005,18 @@ ul.bullets li{font-size:15px;color:var(--slate);margin-bottom:12px;position:rela
     pendingName = fname;
     hideLdr();
 
-    const isAgent = !!localStorage.getItem('f_active_agent');
-    
-    if (isAgent) {
-        // If an agent is testing, they CAN see it
-        window.latestProposalHtml = html;
-        setTimeout(() => {
-            const iframe = document.getElementById('proposalIframe');
-            if (iframe) {
-                iframe.srcdoc = html;
-                openModal('proposalModal');
-            }
-        }, 800);
-    }
-
     addAg(`
         <div class="reqcard-box" style="text-align:center;padding:28px 20px;">
             <div style="margin-bottom:14px"><svg viewBox="0 0 48 48" width="48" height="48" fill="none"><circle cx="24" cy="24" r="20" stroke="var(--green)" stroke-width="2.5"/><path d="M15 24l6 6 12-12" stroke="var(--green)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
             <div style="font-size:17px;font-weight:700;margin-bottom:10px">Solution Architecture Complete</div>
             <div style="font-size:13px;color:var(--sub);line-height:1.75;max-width:400px;margin:0 auto">
-                Your requirements have been successfully mapped to the CCMS Reference Architecture.<br/><br/>
-                <strong>A Fristine presales specialist is reviewing your tailored proposal and will share the formal multi-page document with you shortly for approval.</strong>
-                ${isAgent ? `
-                <div style="display:flex;gap:10px;justify-content:center;margin-top:15px;background:rgba(255,165,0,0.1);padding:10px;border-radius:8px;border:1px dashed orange;">
-                    <div style="text-align:left;">
-                        <span style="font-size:11px;color:orange;display:block;margin-bottom:5px;font-weight:700;">Agent Preview Mode:</span>
-                        <button class="btn-primary btn-sm" onclick="document.getElementById('proposalIframe').srcdoc=window.latestProposalHtml; document.getElementById('proposalModal').classList.add('visible');" style="padding: 6px 12px;font-size:11px;">View Proposal</button>
-                    </div>
-                </div>` : ''}
+                Your requirements have been successfully mapped to the CCMS Reference Architecture by Arya.<br/><br/>
+                <strong>A Fristine presales specialist is reviewing your tailored proposal and will share the formal multi-page document with you shortly via email/portal for final approval.</strong>
             </div>
         </div>`, { noEscape: true });
+    
+    // Sync sidebar to final stage
+    setStg(4, 'done'); setPhase('Proposal Pending Review');
 }
 
 /**
