@@ -937,8 +937,11 @@ async function openTracking(clientId) {
 
     const ps = document.getElementById('proposalSection');
     try { 
+        console.log('[Tracking] Fetching proposals for:', clientId);
         const pData = await proposals.get(clientId); 
+        console.log('[Tracking] Proposals received:', pData);
         if (pData && pData.versions && pData.versions.length > 0) {
+
             ps.style.display = 'block';
             let html = '<div class="section-title">Generated Proposals</div><div style="display:flex;flex-direction:column;gap:12px;">';
             
@@ -1988,36 +1991,48 @@ ul.bullets li{font-size:15px;color:var(--slate);margin-bottom:12px;position:rela
 </div></body></html>`;
 
     if (activeClientId) {
-        try { await proposals.save(activeClientId, html, `CCMS Proposal — ${cli.company||'Client'}`); } catch {}
-        try { await tracking.logEvent(activeClientId, 'proposal_generated'); } catch {}
-        try { await tracking.logEvent(activeClientId, 'proposal_submitted'); } catch {}
-    }
-
-    window.latestProposalHtml = html;
-    // Auto-open proposal modal for the user
-    setTimeout(() => {
-        const iframe = document.getElementById('proposalIframe');
-        if (iframe) {
-            iframe.srcdoc = html;
-            openModal('proposalModal');
-            showToast('Proposal generated and opened!', 'success');
+        try { 
+            console.log('[Proposal] Saving version for:', activeClientId);
+            await proposals.save(activeClientId, html, `CCMS Proposal — ${cli.company||'Client'}`); 
+            console.log('[Proposal] Save SUCCESS');
+        } catch (err) {
+            console.error('[Proposal] Save FAILED:', err);
         }
-    }, 1000);
+        try { await tracking.logEvent(activeClientId, 'proposal_generated'); } catch {}
+    }
 
     pendingBlob = new Blob([html], { type: 'text/html' });
     pendingName = fname;
     hideLdr();
 
+    const isAgent = !!localStorage.getItem('f_active_agent');
+    
+    if (isAgent) {
+        // If an agent is testing, they CAN see it
+        window.latestProposalHtml = html;
+        setTimeout(() => {
+            const iframe = document.getElementById('proposalIframe');
+            if (iframe) {
+                iframe.srcdoc = html;
+                openModal('proposalModal');
+            }
+        }, 800);
+    }
+
     addAg(`
         <div class="reqcard-box" style="text-align:center;padding:28px 20px;">
             <div style="margin-bottom:14px"><svg viewBox="0 0 48 48" width="48" height="48" fill="none"><circle cx="24" cy="24" r="20" stroke="var(--green)" stroke-width="2.5"/><path d="M15 24l6 6 12-12" stroke="var(--green)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-            <div style="font-size:17px;font-weight:700;margin-bottom:10px">CCMS Proposal is Generated!</div>
+            <div style="font-size:17px;font-weight:700;margin-bottom:10px">Solution Architecture Complete</div>
             <div style="font-size:13px;color:var(--sub);line-height:1.75;max-width:400px;margin:0 auto">
                 Your requirements have been successfully mapped to the CCMS Reference Architecture.<br/><br/>
-                <div style="display:flex;gap:10px;justify-content:center;margin-top:15px;">
-                    <button class="btn-primary btn-sm" onclick="document.getElementById('proposalIframe').srcdoc=window.latestProposalHtml; document.getElementById('proposalModal').classList.add('visible');" style="padding: 8px 16px;">View Proposal</button>
-                    <button class="btn-ghost btn-sm" onclick="document.dispatchEvent(new CustomEvent('downloadClientProposal'))" style="padding: 8px 16px;">Download PDF</button>
-                </div>
+                <strong>A Fristine presales specialist is reviewing your tailored proposal and will share the formal multi-page document with you shortly for approval.</strong>
+                ${isAgent ? `
+                <div style="display:flex;gap:10px;justify-content:center;margin-top:15px;background:rgba(255,165,0,0.1);padding:10px;border-radius:8px;border:1px dashed orange;">
+                    <div style="text-align:left;">
+                        <span style="font-size:11px;color:orange;display:block;margin-bottom:5px;font-weight:700;">Agent Preview Mode:</span>
+                        <button class="btn-primary btn-sm" onclick="document.getElementById('proposalIframe').srcdoc=window.latestProposalHtml; document.getElementById('proposalModal').classList.add('visible');" style="padding: 6px 12px;font-size:11px;">View Proposal</button>
+                    </div>
+                </div>` : ''}
             </div>
         </div>`, { noEscape: true });
 }
