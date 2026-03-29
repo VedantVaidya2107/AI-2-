@@ -307,8 +307,12 @@ Critical Instruction (File Handling):
 
 Task: Analyze the attached requirement document and generate a comprehensive, highly customized technical proposal with Data Analyst precision.`;
 
-/* ══ BOOT ══ */
+let isAppInitialized = false;
+
 async function init() {
+    if (isAppInitialized) return;
+    isAppInitialized = true;
+
     initTheme();
     initPasswordToggle();
     initCaptcha();
@@ -329,15 +333,20 @@ async function init() {
     // Client/Agent Exit Check
     if (params.get('exit')) {
         const agent = localStorage.getItem('f_active_agent');
-        window.history.replaceState({}, document.title, window.location.pathname);
+        
+        // Final protection: Hide everything before showing the end screen
+        document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
         hideLdr();
-        hide('A'); show('SE'); // Always show Thank You screen for clients
+        show('SE'); 
+        
+        // Avoid using replaceState here as it might trigger re-init or confuse logic
+        // window.history.replaceState({}, document.title, window.location.pathname);
         
         if (agent) {
-             // If we're an agent, add a helpful link back home
              const card = document.querySelector('#SE .auth-card');
-             if (card) {
+             if (card && !document.getElementById('backToDashBtn_end')) {
                  const backBtn = document.createElement('button');
+                 backBtn.id = 'backToDashBtn_end';
                  backBtn.className = 'btn-primary w-full mt-12';
                  backBtn.style.marginTop = '12px';
                  backBtn.innerText = '← Back to Agent Dashboard';
@@ -347,6 +356,7 @@ async function init() {
         }
         return;
     }
+
 
 
     const clientId = params.get('client');
