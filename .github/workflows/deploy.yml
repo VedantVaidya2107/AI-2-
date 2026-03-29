@@ -31,11 +31,12 @@ jobs:
         run: npm install
 
       - name: Build
-        run: npx vite build --base=/AI-2-/
+        run: npx vite build --base=/Pre-Sales-AI-Agent-OG/
         env:
           VITE_API_URL: https://presales-backend-5u8q.onrender.com
-          VITE_BASE_PATH: /AI-2-/
+          VITE_BASE_PATH: /Pre-Sales-AI-Agent-OG/
           VITE_DEEPGRAM_KEY: 6e712ff0167128210a0dae3fc2fcda370858fc7e
+
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

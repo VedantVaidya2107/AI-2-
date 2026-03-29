@@ -1,4 +1,4 @@
-# Fristine AI Pre-Sales Architect 🚀
+# Fristine AI Pre-Sales Architect (OG) 🚀
 
 The **Fristine AI Pre-Sales Architect** is a state-of-the-art multi-agent system designed to automate the initial discovery, solution architecting, and proposal generation phases for Fristine Infotech — India's leading Premium Zoho Partner.
 
@@ -33,9 +33,8 @@ Built using **FastAPI**, **React (Vite)**, and **Google Gemini 1.5**, this platf
 ## 🏗️ Architecture
 
 ```text
-AI-2-/
+Pre-Sales-AI-Agent-OG/
 ├── backend/               # FastAPI + Supabase Backend
-
 │   ├── main.py            # App entry point & Routing
 │   ├── routers/           # Specialized API domains (Auth, Proposals, Tracking, Gemini)
 │   └── utils/             # Supabase client & utility functions
