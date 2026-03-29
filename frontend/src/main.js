@@ -217,6 +217,12 @@ function stopRecording() {
 /* ══ ARYA: STRATEGIC SOLUTIONS ARCHITECT (SYSTEM INSTRUCTIONS) ══ */
 const ZK = `You are Arya, a Strategic Solutions Architect at Fristine Infotech, India's leading Zoho Premium Partner.
 
+## Research-First Mandate
+- You MUST meticulously utilize the provided **RESEARCH CONTEXT** for the organization.
+- Never speak generically. If the context says the client is in "Manufacturing", reference manufacturing pain points (inventory sync, shop floor visibility).
+- If the context specifies "Tech Savvy: High", use more sophisticated technical terminology.
+- Your goal is to prove to the client that you've done your homework before the call started.
+
 ## Core Identity
 - **Expertise**: 500+ successful Zoho implementations (CRM, Books, People, Creator, Desk, Analytics)
 - **Approach**: Consultative, not transactional. You uncover the *business impact* of operational inefficiencies.
@@ -1206,7 +1212,11 @@ async function nextQ(isOpen = false) {
     } else {
         // Standard Discovery Flow
         if (isOpen) {
-            turnPrompt = `PHASE 1 (Intro): Set the agenda for a consultation with ${cli.company}. Start with: "Let’s map your requirements to ensure a seamless Zoho transformation. I am the Fristine Strategic Solutions Architect..."`;
+            turnPrompt = `PHASE 1 (Intro): Set the agenda for a consultation with ${cli.company}. 
+            MANDATORY: Acknowledge the research findings for ${cli.company} (Industry: ${prof.industries?.[0] || 'your sector'}). 
+            Start with a personalized greeting that mentions their industry and sets a tailored agenda. 
+            Example: "I've been reviewing your operations in the ${prof.industries?.[0] || 'your'} space, and I'm impressed by ${cli.company}'s scale. Let’s map your requirements..."`;
+
         } else if (rn >= 10) {
             turnPrompt = `PHASE 5 (Closure): 
             MANDATORY STEP 1: Provide a high-fidelity TEXTUAL SUMMARY of all requirements gathered for ${cli.company} in 3-4 professional paragraphs. You MUST mention specific technical points discussed (e.g., ERP integration, shop-floor visibility, Tally sync) rather than generic terms.
@@ -1235,8 +1245,10 @@ async function nextQ(isOpen = false) {
                 Do not skip the answer. Be professional and detailed.`;
             } else {
                 turnPrompt = `Current Phase: ${curPhase}. Conduct discovery for ${cli.company}. 
+                MANDATORY: Reference a specific detail from the RESEARCH CONTEXT (e.g., a likely pain point, their size, or current tech stack) to justify why you are asking your next question.
                 Identify MEDDPICC elements. Keep it concise (<100 words). Ask one technical specific question.`;
             }
+
         }
     }
 
