@@ -123,10 +123,10 @@ export const auth = {
     : request('GET', `/api/auth/check?email=${encodeURIComponent(email)}`).catch(() => { _mockMode = true; return mockAuth().check(email); }),
   login:       (email, password) => _mockMode
     ? mockAuth().login(email, password)
-    : request('POST', '/api/auth/login/', { email, password }).catch(e => { if (e.message === 'Failed to fetch') { _mockMode = true; return mockAuth().login(email, password); } throw e; }),
+    : request('POST', '/api/auth/login', { email, password }).catch(e => { if (e.message === 'Failed to fetch') { _mockMode = true; return mockAuth().login(email, password); } throw e; }),
   setPassword: (email, password, name = '') => _mockMode
     ? mockAuth().setPassword(email, password)
-    : request('POST', '/api/auth/set-password/', { email, password, name }).catch(e => {
+    : request('POST', '/api/auth/set-password', { email, password, name }).catch(e => {
         console.error('[API] setPassword failed:', e);
         if (_mockMode) return mockAuth().setPassword(email, password);
         throw e;
@@ -135,18 +135,18 @@ export const auth = {
 
 /* ── Clients ── */
 export const clients = {
-  list:   ()         => _mockMode ? mockClients().list()        : request('GET',    '/api/clients/').catch(() => { _mockMode = true; return mockClients().list(); }),
+  list:   ()         => _mockMode ? mockClients().list()        : request('GET',    '/api/clients').catch(() => { _mockMode = true; return mockClients().list(); }),
   get:    (id)       => _mockMode ? mockClients().get(id)       : request('GET',    `/api/clients/${id}`),
-  nextId: ()         => _mockMode ? mockClients().nextId()       : request('GET',    '/api/clients/next-id/'),
-  create: (data)     => _mockMode ? mockClients().create(data)   : request('POST',   '/api/clients/', data),
+  nextId: ()         => _mockMode ? mockClients().nextId()       : request('GET',    '/api/clients/next-id'),
+  create: (data)     => _mockMode ? mockClients().create(data)   : request('POST',   '/api/clients', data),
   update: (id, data) => _mockMode ? mockClients().update(id,data): request('PUT',    `/api/clients/${id}`, data),
   delete: (id)       => _mockMode ? mockClients().delete(id)     : request('DELETE', `/api/clients/${id}`),
 };
 
 /* ── Tracking ── */
 export const tracking = {
-  getEvents: (id)         => _mockMode ? _mockTracking.getEvents(id)       : request('GET',  `/api/tracking/${id}/`).catch(() => []),
-  logEvent:  (id, ev, nt) => _mockMode ? _mockTracking.logEvent(id, ev)    : request('POST', `/api/tracking/${id}/`, { event: ev, note: nt }).catch(() => {}),
+  getEvents: (id)         => _mockMode ? _mockTracking.getEvents(id)       : request('GET',  `/api/tracking/${id}`).catch(() => []),
+  logEvent:  (id, ev, nt) => _mockMode ? _mockTracking.logEvent(id, ev)    : request('POST', `/api/tracking/${id}`, { event: ev, note: nt }).catch(() => {}),
 };
 
 /* ── Proposals ── */
@@ -182,16 +182,16 @@ export const email = {
 
 /* ── Voice ── */
 export const voice = {
-  getKey: () => _mockMode ? Promise.resolve({ key: 'mock-key' }) : request('GET', '/api/voice/key/'),
+  getKey: () => _mockMode ? Promise.resolve({ key: 'mock-key' }) : request('GET', '/api/voice/key'),
   speak:  async (text) => {
     try {
       // Try real TTS even if in mock mode (can't mock audio easily)
-      return await request('POST', '/api/voice/speak/', { text }, true);
+      return await request('POST', '/api/voice/speak', { text }, true);
     } catch {
       return { audio: null };
     }
   },
-  call: (phone) => _mockMode ? (console.log('[MOCK] Call to', phone), Promise.resolve({ success: true })) : request('POST', '/api/voice/call/', { phone }),
+  call: (phone) => _mockMode ? (console.log('[MOCK] Call to', phone), Promise.resolve({ success: true })) : request('POST', '/api/voice/call', { phone }),
 };
 
 
