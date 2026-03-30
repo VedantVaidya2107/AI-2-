@@ -1160,6 +1160,17 @@ body.focus-mode-active .exit-call-btn {
   
   /* Show menu toggle on mobile */
   .mobile-menu-toggle { display: flex !important; }
+
+  /* Client Side Fixes */
+  .bot-body { display: block; overflow: visible; }
+  .bot-main { width: 100%; min-width: 100%; margin-left: 0; }
+  .chat-panel { height: calc(100vh - 58px); }
+  .chat-feed { padding: 16px 14px; }
+  .msg-bubble { max-width: 85%; }
+  
+  .reqcard-box { margin: 0 -4px; border-radius: 12px; }
+  .reqs-actions { flex-direction: column; }
+  .reqs-actions button { width: 100%; justify-content: center; }
 }
 
 @media (max-width: 480px) {
@@ -1174,7 +1185,12 @@ body.focus-mode-active .exit-call-btn {
   .chat-input-bar { padding: 8px; gap: 4px; }
   .chat-input { font-size: 13px; }
   .input-action-btn { width: 32px; height: 32px; }
-  .msg-bubble { max-width: 90%; font-size: 13px; }
+  .msg-bubble { max-width: 92%; font-size: 13px; padding: 10px 14px; }
+  .msg-av { width: 30px; height: 30px; font-size: 11px; }
+
+  /* Header Branding for Tiny Screens */
+  .ai-badge { padding: 2px 6px; font-size: 9px; }
+  .phase-chip { padding: 4px 8px; font-size: 10px; }
 }
 
 /* ─── Mobile Menu Toggle Button ─── */
