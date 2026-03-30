@@ -324,6 +324,7 @@ async function init() {
     initPasswordToggle();
     initCaptcha();
     initKpis();
+    initMobileMenu();
     const params = new URLSearchParams(window.location.search);
     const clientId = params.get('client');
     
@@ -2691,6 +2692,23 @@ function updateDiscoveryUI() {
     if (items >= 4 && !discoveryComplete) {
         console.log('[Discovery] Strategic criteria met.');
     }
+}
+
+/* ══ MOBILE UI HELPERS ══ */
+function initMobileMenu() {
+    const toggleA = document.getElementById('menuToggleA');
+    const toggleH = document.getElementById('menuToggleH');
+    const side = document.getElementById('sidebar');
+
+    const toggle = () => side?.classList.toggle('open');
+
+    if (toggleA) toggleA.onclick = toggle;
+    if (toggleH) toggleH.onclick = toggle;
+
+    // Close menu when clicking outside (on the chat panel)
+    document.querySelector('.chat-panel')?.addEventListener('click', () => {
+        if (side?.classList.contains('open')) side.classList.remove('open');
+    });
 }
 
 /* ══ BOOT ══ */
