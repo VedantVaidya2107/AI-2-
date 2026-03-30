@@ -368,14 +368,19 @@ async function init() {
 
 
     // Performance: Only animate if visible
-    const observer = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-            if (entry.isIntersecting) {
-                entry.target.classList.add('animate-in');
-            }
-        });
-    }, { threshold: 0.1 });
     document.querySelectorAll('.stat-card').forEach(card => observer.observe(card));
+
+    // ─── Mobile Menu Toggle Logic ───
+    const side = document.querySelector('.bot-sidebar');
+    const toggleMenu = () => side?.classList.toggle('open');
+    
+    document.getElementById('menuToggleH')?.addEventListener('click', (e) => { e.stopPropagation(); toggleMenu(); });
+    document.getElementById('menuToggleA')?.addEventListener('click', (e) => { e.stopPropagation(); toggleMenu(); });
+    
+    // Close menu when clicking outside (on the chat panel)
+    document.querySelector('.chat-panel')?.addEventListener('click', () => {
+        if (side?.classList.contains('open')) side.classList.remove('open');
+    });
 }
 
 async function bootStaffLogin() {
@@ -589,8 +594,8 @@ document.getElementById('signupBtn').addEventListener('click', async () => {
 
     try {
         // auth.setPassword can be used for new account creation too if backend handles it
-        // Or we just call it and it works since new records are created in agents table
-        await auth.setPassword(em, pw1); 
+        // Now sending the 'name' field correctly to the backend
+        await auth.setPassword(em, pw1, name); 
         // Note: For a real app, you'd also save the name, but here we prioritize password setup.
         showToast('Account created successfully!', 'success');
         localStorage.setItem('f_active_agent', em);

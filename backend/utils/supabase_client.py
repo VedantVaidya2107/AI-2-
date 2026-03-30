@@ -13,7 +13,10 @@ supabase: Client = None
 if url and key:
     try:
         supabase = create_client(url, key)
-        print("[Supabase] Client initialized successfully.")
+        # Check if it's a service key or anon key
+        is_service = "service_role" in (key[:100] if key else "") or "service" in (key.lower() if key else "")
+        role_label = "SERVICE_ROLE" if is_service else "ANON"
+        print(f"[Supabase] Client initialized with {role_label} key.")
     except Exception as e:
         print(f"[Supabase Error] Failed to initialize: {e}")
 else:

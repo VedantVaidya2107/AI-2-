@@ -119,9 +119,13 @@ export const auth = {
   login:       (email, password) => _mockMode
     ? mockAuth().login(email, password)
     : request('POST', '/api/auth/login/', { email, password }).catch(e => { if (e.message === 'Failed to fetch') { _mockMode = true; return mockAuth().login(email, password); } throw e; }),
-  setPassword: (email, password) => _mockMode
+  setPassword: (email, password, name = '') => _mockMode
     ? mockAuth().setPassword(email, password)
-    : request('POST', '/api/auth/set-password/', { email, password }).catch(() => { _mockMode = true; return mockAuth().setPassword(email, password); }),
+    : request('POST', '/api/auth/set-password/', { email, password, name }).catch(e => {
+        console.error('[API] setPassword failed:', e);
+        if (_mockMode) return mockAuth().setPassword(email, password);
+        throw e;
+      }),
 };
 
 /* ── Clients ── */

@@ -35,21 +35,35 @@ def _get_agent(email: str):
             pass
     return _read_agents().get(email)
 
-def _upsert_agent(email: str, password: str):
+def _upsert_agent(email: str, password: str, name: str = None):
     """Upsert agent to Supabase if available, else to agents.json."""
     if supabase:
         try:
-            supabase.table("agents").upsert({
+            data = {
                 "email": email,
                 "password": password,
                 "updated_at": datetime.now(timezone.utc).isoformat()
-            }).execute()
+            }
+            if name:
+                data["name"] = name
+            
+            supabase.table("agents").upsert(data).execute()
+            print(f"[Supabase] Successfully upserted agent: {email}")
             return
-        except Exception:
+        except Exception as e:
+            print(f"[Supabase Error] Upsert failed for {email}: {e}")
+            # Fall back to local storage
             pass
+            
     agents = _read_agents()
-    agents[email] = {"email": email, "password": password, "updatedAt": datetime.now(timezone.utc).isoformat()}
+    agents[email] = {
+        "email": email, 
+        "password": password, 
+        "name": name or email.split("@")[0],
+        "updatedAt": datetime.now(timezone.utc).isoformat()
+    }
     _write_agents(agents)
+    print(f"[Local Storage] Upserted agent: {email}")
 
 # ── Models ───────────────────────────────────────────────────────────────────
 class LoginRequest(BaseModel):
@@ -59,6 +73,7 @@ class LoginRequest(BaseModel):
 class PassRequest(BaseModel):
     email: str
     password: str
+    name: str = None
 
 # ── Routes ───────────────────────────────────────────────────────────────────
 @router.get("/check")
@@ -91,5 +106,5 @@ async def set_password(req: PassRequest):
     email_lower = req.email.lower()
     if not email_lower.endswith("@fristinetech.com"):
         raise HTTPException(status_code=403, detail="Access restricted to @fristinetech.com accounts")
-    _upsert_agent(email_lower, req.password)
+    _upsert_agent(email_lower, req.password, req.name)
     return {"success": True}

@@ -14,5 +14,5 @@ services:
       - key: ENV
         value: production
       - key: FRONTEND_URL
-        value: https://vedantvaidya2107.github.io
+        value: https://vedantvaidya2107.github.io/Pre-Sales-AI-Agent-OG
       # Make sure to set GEMINI_API_KEY, EMAIL_USER, and EMAIL_PASS manually in the Render Dashboard!
