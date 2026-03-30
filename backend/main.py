@@ -8,7 +8,7 @@ import asyncio
 
 from routers import auth, clients, tracking, proposals, email, gemini, documents, voice
 
-load_dotenv()
+load_dotenv(override=False)
 
 # ── Keep-alive self-ping (prevents Render free tier from sleeping) ────────
 RENDER_URL = os.environ.get("RENDER_EXTERNAL_URL")  # Auto-set by Render
@@ -31,8 +31,10 @@ async def keep_alive():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    print("[Startup] App is starting up...")
     task = asyncio.create_task(keep_alive())
     yield
+    print("[Shutdown] App is shutting down...")
     task.cancel()
 
 app = FastAPI(title="Fristine Presales Backend", redirect_slashes=True, lifespan=lifespan)
