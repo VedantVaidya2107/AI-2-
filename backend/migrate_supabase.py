@@ -42,6 +42,7 @@ def migrate_clients():
             "company": c.get("company"),
             "industry": c.get("industry"),
             "email": c.get("email"),
+            "Phone": c.get("phone") or c.get("Phone"), # Handle both cases
             "notes": c.get("notes"),
             "size": c.get("size"),
             "created_at": c.get("createdAt", datetime.now().isoformat())

@@ -27,7 +27,12 @@ async def generate_client_id():
 async def get_clients():
     try:
         res = supabase.table("clients").select("*").order("created_at", desc=True).execute()
-        return res.data or []
+        data = res.data or []
+        # Support both 'Phone' and 'phone' keys by mapping 'Phone' to 'phone'
+        for item in data:
+            if "Phone" in item:
+                item["phone"] = item.pop("Phone")
+        return data
     except Exception as e:
         print(f"[Backend Error] Clients GET failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -42,7 +47,10 @@ async def get_client(client_id: str):
     res = supabase.table("clients").select("*").eq("client_id", client_id).execute()
     if not res.data:
         raise HTTPException(status_code=404, detail="Client not found")
-    return res.data[0]
+    item = res.data[0]
+    if "Phone" in item:
+        item["phone"] = item.pop("Phone")
+    return item
 
 @router.post("", status_code=201)
 async def create_client(req: ClientCreate):
@@ -52,7 +60,7 @@ async def create_client(req: ClientCreate):
         "company": (req.company or "").strip(),
         "industry": (req.industry or "").strip(),
         "email": (req.email or "").strip(),
-        "phone": (req.phone or "").strip(),
+        "Phone": (req.phone or "").strip(),  # Supabase uses 'Phone'
         "notes": (req.notes or "").strip(),
         "size": (req.size or "").strip(),
         "created_at": datetime.now(timezone.utc).isoformat()
@@ -61,7 +69,10 @@ async def create_client(req: ClientCreate):
         res = supabase.table("clients").insert(new_client).execute()
         if not res.data:
              raise Exception("Supabase insert returned no data (check RLS or Column names)")
-        return res.data[0]
+        item = res.data[0]
+        if "Phone" in item:
+            item["phone"] = item.pop("Phone")
+        return item
     except Exception as e:
         print(f"[Supabase Error] create_client failed: {e}")
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
@@ -70,10 +81,17 @@ async def create_client(req: ClientCreate):
 async def update_client(client_id: str, updates: dict):
     # Ensure client_id is not in updates or matches
     updates.pop("client_id", None)
+    # Map phone -> Phone for Supabase
+    if "phone" in updates:
+        updates["Phone"] = updates.pop("phone")
+        
     res = supabase.table("clients").update(updates).eq("client_id", client_id).execute()
     if not res.data:
         raise HTTPException(status_code=404, detail="Client not found")
-    return res.data[0]
+    item = res.data[0]
+    if "Phone" in item:
+        item["phone"] = item.pop("Phone")
+    return item
 
 @router.delete("/{client_id}")
 async def delete_client(client_id: str):

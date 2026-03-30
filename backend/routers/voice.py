@@ -12,7 +12,7 @@ class TTSRequest(BaseModel):
 class CallRequest(BaseModel):
     phone: str
 
-@router.get("/key/")
+@router.get("/key")
 async def get_voice_key():
     """Returns the Deepgram API key (or a short-lived token)."""
     key = os.environ.get("DEEPGRAM_API_KEY")
@@ -20,7 +20,7 @@ async def get_voice_key():
         raise HTTPException(status_code=500, detail="DEEPGRAM_API_KEY not set")
     return {"key": key}
 
-@router.post("/speak/")
+@router.post("/speak")
 async def text_to_speech(req: TTSRequest):
     """Proxies request to Deepgram TTS."""
     key = os.environ.get("DEEPGRAM_API_KEY")
@@ -44,7 +44,7 @@ async def text_to_speech(req: TTSRequest):
         audio_b64 = base64.b64encode(resp.content).decode("utf-8")
         return {"audio": audio_b64}
 
-@router.post("/call/")
+@router.post("/call")
 async def make_call(req: CallRequest):
     """Initiates a Twilio Call."""
     account_sid = os.environ.get("TWILIO_ACCOUNT_SID")
