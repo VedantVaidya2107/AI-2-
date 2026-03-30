@@ -23,7 +23,7 @@ async def generate_client_id():
     next_id = max(valid_ids) + 1 if valid_ids else 1
     return f"FRIST{next_id:03d}"
 
-@router.get("/")
+@router.get("")
 async def get_clients():
     try:
         res = supabase.table("clients").select("*").order("created_at", desc=True).execute()
@@ -44,7 +44,7 @@ async def get_client(client_id: str):
         raise HTTPException(status_code=404, detail="Client not found")
     return res.data[0]
 
-@router.post("/", status_code=201)
+@router.post("", status_code=201)
 async def create_client(req: ClientCreate):
     client_id = await generate_client_id()
     new_client = {

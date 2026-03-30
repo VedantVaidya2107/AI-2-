@@ -10,12 +10,12 @@ class TrackingEvent(BaseModel):
     event: str
     note: Optional[str] = None
 
-@router.get("/{client_id}/")
+@router.get("/{client_id}")
 async def get_events(client_id: str):
     res = supabase.table("tracking").select("*").eq("client_id", client_id).order("timestamp", desc=True).execute()
     return res.data or []
 
-@router.post("/{client_id}/")
+@router.post("/{client_id}")
 async def create_event(client_id: str, req: TrackingEvent):
     # Check if event already exists for this client (deduplication as per old logic)
     res_check = supabase.table("tracking").select("id").eq("client_id", client_id).eq("event", req.event).execute()

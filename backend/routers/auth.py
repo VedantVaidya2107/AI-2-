@@ -93,7 +93,7 @@ async def check_auth(email: str):
     has_password = bool(agent.get("password")) if agent else False
     return {"hasPassword": has_password, "email": email_lower}
 
-@router.post("/login/")
+@router.post("/login")
 async def login(req: LoginRequest):
     email_lower = req.email.lower()
     if not email_lower.endswith("@fristinetech.com"):
@@ -105,7 +105,7 @@ async def login(req: LoginRequest):
         raise HTTPException(status_code=401, detail={"error": "WRONG_PASSWORD", "message": "Incorrect password."})
     return {"success": True, "email": email_lower, "name": agent.get("name") or email_lower.split("@")[0]}
 
-@router.post("/set-password/")
+@router.post("/set-password")
 async def set_password(req: PassRequest):
     if len(req.password) < 8:
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
