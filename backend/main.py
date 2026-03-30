@@ -41,10 +41,12 @@ app = FastAPI(title="Fristine Presales Backend", redirect_slashes=True, lifespan
 
 
 # CORS Middleware
+# We MUST use explicit origins (not "*") when allow_credentials is True
 origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "https://vedantvaidya2107.github.io",
+    "https://vedantvaidya2107.github.io/",
 ]
 
 app.add_middleware(
