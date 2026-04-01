@@ -1,5 +1,5 @@
 import '../style.css';
-import { auth, clients, tracking, proposals, email, documents, gem, voice, safeJ } from './services/api.js';
+import { auth, clients, tracking, proposals, email, documents, gem, ai, voice, safeJ } from './services/api.js';
 import mammoth from 'mammoth';
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle, ShadingType } from 'docx';
 import { saveAs } from 'file-saver';
@@ -234,8 +234,25 @@ async function initVoice() {
             callingMode = true;
             document.body.classList.add('focus-mode-active');
             document.getElementById('callStatus')?.classList.remove('hidden');
-            // Full screen overlay for hands-free
-            gsap.to('.call-overlay-center', { opacity: 1, display: 'flex', duration: 0.4 });
+            
+            // Premium Full screen overlay transition
+            const overlay = document.querySelector('.call-overlay-center');
+            gsap.set(overlay, { display: 'flex', opacity: 0 });
+            gsap.to(overlay, { 
+                opacity: 1, 
+                duration: 0.6, 
+                ease: 'expo.out' 
+            });
+
+            // Stagger elements inside the overlay
+            gsap.from('.call-avatar, .call-status-text, .large-voice-wave', {
+                y: 40,
+                opacity: 0,
+                duration: 0.8,
+                stagger: 0.15,
+                ease: 'back.out(1.7)',
+                delay: 0.2
+            });
             
             showToast('Calling Mode: Hands-Free On', 'success');
             await setMicState(true);
@@ -253,7 +270,17 @@ async function initVoice() {
             callingMode = false;
             document.body.classList.remove('focus-mode-active');
             document.getElementById('callStatus')?.classList.add('hidden');
-            gsap.to('.call-overlay-center', { opacity: 0, display: 'none', duration: 0.3 });
+            
+            // Smooth exit transition
+            gsap.to('.call-overlay-center', { 
+                opacity: 0, 
+                duration: 0.4, 
+                ease: 'power2.inOut',
+                onComplete: () => {
+                    const overlay = document.querySelector('.call-overlay-center');
+                    if (overlay) overlay.style.display = 'none';
+                }
+            });
             
             // Kill audio playback
             voiceQueue = [];
@@ -271,8 +298,8 @@ async function initVoice() {
 }
 
 /* ══ FRISTINE AI PRE-SALES ARCHITECT (SYSTEM INSTRUCTIONS) ══ */
-const ZK = `### Role: Senior Presales AI Agent for Fristine Infotech
-You are the Senior Presales AI Agent for Fristine Infotech, a Premium Zoho Partner with 9 years of experience and 300+ implementations. Your goal is to conduct a discovery session to gather requirements for a Zoho Implementation Proposal.
+const ZK = `### Role: Fristine AI — Senior Presales Agent
+You are Fristine AI, the lead Senior Presales Agent for Fristine Infotech, a Premium Zoho Partner with 9 years of experience and 300+ implementations. Your goal is to conduct a professional discovery session to gather requirements for a Zoho Implementation Proposal.
 
 ### Core Behavior Rules:
 1. **Persistence & State-Awareness**: If a client returns, acknowledge the previous progress. Use: "Welcome back! Let's pick up where we left off regarding your [Last Section Name]."
@@ -1349,9 +1376,12 @@ async function nextQ(isOpen = false) {
             Briefly summarize the core technical objective you found in the document (under 30 words) and ask if the user would like to dive into validating the technical integrations (e.g., SAP, Third-party APIs) or the internal workflow mapping.`;
         } else if (rn >= 10) {
             turnPrompt = `The discovery for the BRD-based requirements is complete. 
-            Output REQUIREMENTS_COMPLETE followed by the full JSON summary reflecting the document-specific requirements.
+            Output REQUIREMENTS_COMPLETE followed by the full ULTRA-DETAILED JSON summary. 
+            
+            CRITICAL: The "detailed_analysis" field MUST be a long-form markdown string (5+ paragraphs) explaining the technical rationale for the proposed Zoho architecture.
+            
             JSON SCHEMA: {
-              "business_overview": "Summary", "departments": [], "current_tools": [], "pain_points": [], 
+              "business_overview": "Summary", "detailed_analysis": "Long-form technical rationale", "departments": [], "current_tools": [], "pain_points": [], 
               "must_have": [], "nice_to_have": [], "automation_opportunities": [], "integrations": [], 
               "success_metrics": [], "zoho_products": [], "user_count": 0, "industry": "", "summary": "", "timeline": ""
             }`;
@@ -1375,11 +1405,14 @@ async function nextQ(isOpen = false) {
             turnPrompt = `PHASE 5 (Closure): Summarize all requirements in a professional Markdown Table format.
             MANDATORY: Use EXACT wording for the last sentence of your response: "Thank you! I have captured your requirements. A Fristine Solutions Architect will now review this to finalize your formal proposal within 24–48 hours."
             MANDATORY STEP 2: Write the exact keyword: REQUIREMENTS_COMPLETE 
-            MANDATORY STEP 3: Provide the full JSON summary block. 
-            CRITICAL: The JSON "must_have" and "pain_points" MUST be populated with specific items from this actual conversation, NOT generic placeholders like "Module Configuration".
+            MANDATORY STEP 3: Provide the full ULTRA-DETAILED JSON summary block. 
+            
+            CRITICAL RULES:
+            1. The "detailed_analysis" field MUST be a deep technical breakdown (5-8 paragraphs) of how Zoho solves their specific business challenges.
+            2. "must_have" and "pain_points" MUST be granular technical items (e.g. "Real-time SAP S/4HANA OData Sync" instead of "Integrations").
             
             JSON SCHEMA: {
-              "business_overview": "Summary", "departments": [], "current_tools": [], "pain_points": [], 
+              "business_overview": "Summary", "detailed_analysis": "Long-form technical rationale", "departments": [], "current_tools": [], "pain_points": [], 
               "must_have": [], "nice_to_have": [], "automation_opportunities": [], "integrations": [], 
               "success_metrics": [], "zoho_products": [], "user_count": 0, "industry": "", "summary": "", "timeline": ""
             }`;
@@ -1451,10 +1484,10 @@ ${fileContent.slice(0, 15000)}
 INSTRUCTIONS:
 1. Acknowledge the file upload warmly and use the "Expert Proposal Specialist" protocol.
 2. Provide a detailed textural summary of all gathered requirements in 3-4 professional paragraphs.
-3. If the document is comprehensive enough (covers pain points, departments, requirements), output REQUIREMENTS_COMPLETE followed by the full JSON block.
+3. If the document is comprehensive enough (covers pain points, departments, requirements), output REQUIREMENTS_COMPLETE followed by the full ULTRA-DETAILED JSON block.
 4. If more info is needed, ask ONE focused follow-up question.
 
-CRITICAL: Extract ALL requirements found and map them to Zoho products.`,
+CRITICAL: The "detailed_analysis" field in the JSON MUST contain a 5+ paragraph technical justification for the proposed stack. Extract ALL requirements found and map them to Zoho products.`,
                 2000, 0.5, true, convo, sys
             );
             removeTypingIndicator();
@@ -1837,6 +1870,17 @@ function renderClientFiles(clientId) {
         </div>`).join('');
 }
 
+/* ══ HELPERS ══ */
+function mdToHtml(md) {
+    if (!md) return '';
+    let h = md.replace(/\n\n+/g, '</p><p>').replace(/\n/g, '<br/>');
+    h = h.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    h = h.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    h = h.replace(/^- (.*?)(?=<br\/|$) /gm, '<li>$1</li>');
+    if (h.includes('<li>')) h = h.replace(/(<li>.*?<\/li>)/gs, '<ul>$1</ul>');
+    return h;
+}
+
 /* ══ REQUIREMENTS SUMMARY ══ */
 function showReqSummary() {
     if (callingMode) {
@@ -1856,47 +1900,68 @@ function showReqSummary() {
     const html = `
     <div class="reqcard-full">
       <div class="reqcard-intro">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-          <div style="width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,var(--green),#34d399);display:flex;align-items:center;justify-content:center">
-            <svg viewBox="0 0 16 16" width="16" height="16" fill="none"><path d="M4 8l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </div>
-          <strong style="font-size:15px;color:var(--text)">Discovery Complete</strong>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <div style="display:flex;align-items:center;gap:10px">
+                <div style="width:32px;height:32px;border-radius:10px;background:linear-gradient(135deg,var(--green),#10b981);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(16,185,129,0.2)">
+                    <svg viewBox="0 0 16 16" width="18" height="18" fill="none"><path d="M4 8l3 3 5-5" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </div>
+                <strong style="font-size:16px;color:var(--navy);letter-spacing:-0.4px">High-Fidelity Discovery Report</strong>
+            </div>
+            <div style="font-size:11px;font-weight:700;color:var(--primary);text-transform:uppercase;letter-spacing:1px;background:rgba(59,130,246,0.1);padding:4px 10px;border-radius:20px">Draft Verified</div>
         </div>
-        Here's a complete summary of everything we've captured. Please review carefully — if this accurately reflects your requirements, confirm and I'll generate your formal proposal.
+        <p style="font-size:13.5px;color:var(--slate);line-height:1.6;margin-bottom:0">We have successfully mapped your requirements to the <strong>Fristine CCMS Framework</strong>. Please review the technical depth below before we trigger the formal proposal generation.</p>
       </div>
+      
       <div class="reqcard-box">
-        <div class="reqcard-title" style="display:flex;align-items:center;gap:8px">
+        <div class="reqcard-title">
           <svg viewBox="0 0 20 20" width="18" height="18" fill="none"><rect x="4" y="3" width="12" height="15" rx="2" stroke="#fff" stroke-width="1.5"/><path d="M8 7h4M8 10h4M8 13h2" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/></svg>
-          Requirements Summary — ${cli?.company || ''}
+          Technical Requirement Specification — ${cli?.company || 'Project Alpha'}
         </div>
-        ${reqs.business_overview ? `<div class="reqs-section"><div class="reqs-label">Business Overview</div><div class="reqs-text">${reqs.business_overview}</div></div>` : ''}
-        ${reqs.industry ? `<div class="reqs-section" style="display:flex;gap:24px;flex-wrap:wrap"><div><div class="reqs-label">Industry</div><div style="font-size:13px;font-weight:600;color:var(--text)">${reqs.industry}</div></div>${reqs.user_count ? `<div><div class="reqs-label">Users</div><div style="font-size:13px;font-weight:600;color:var(--text)">${reqs.user_count}</div></div>` : ''}${reqs.timeline ? `<div><div class="reqs-label">Timeline</div><div style="font-size:13px;font-weight:600;color:var(--text)">${reqs.timeline}</div></div>` : ''}</div>` : ''}
-        ${(reqs.departments||[]).length ? `<div class="reqs-section"><div class="reqs-label">Departments / Teams</div><div class="reqs-chips">${makeChips(reqs.departments)}</div></div>` : ''}
-        ${(reqs.current_tools||[]).length ? `<div class="reqs-section"><div class="reqs-label">Current Tools</div><div class="reqs-chips">${makeChips(reqs.current_tools)}</div></div>` : ''}
-        ${(reqs.pain_points||[]).length ? `<div class="reqs-section"><div class="reqs-label">Pain Points</div><ul class="reqs-list">${makeList(reqs.pain_points)}</ul></div>` : ''}
-        ${(reqs.must_have||[]).length ? `<div class="reqs-section"><div class="reqs-label">Must-Have Requirements</div><ul class="reqs-list">${makeList(reqs.must_have)}</ul></div>` : ''}
-        ${(reqs.nice_to_have||[]).length ? `<div class="reqs-section"><div class="reqs-label">Nice to Have</div><ul class="reqs-list">${makeList(reqs.nice_to_have)}</ul></div>` : ''}
-        ${(reqs.automation_opportunities||[]).length ? `<div class="reqs-section"><div class="reqs-label">Automation Opportunities</div><ul class="reqs-list">${makeList(reqs.automation_opportunities)}</ul></div>` : ''}
-        ${(reqs.integrations||[]).length ? `<div class="reqs-section"><div class="reqs-label">Integration Requirements</div><ul class="reqs-list">${makeList(reqs.integrations)}</ul></div>` : ''}
-        ${(reqs.success_metrics||[]).length ? `<div class="reqs-section"><div class="reqs-label">Success Metrics</div><ul class="reqs-list">${makeList(reqs.success_metrics)}</ul></div>` : ''}
-        ${productChips ? `<div class="reqs-section"><div class="reqs-label">Recommended Zoho Products</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px">${productChips}</div></div>` : ''}
-        <div class="reqs-actions" style="display:flex;flex-wrap:wrap;gap:10px;padding:16px 18px;background:var(--bg);border-top:1px solid var(--brd)">
-          <button class="reqs-btn-confirm" id="confirmProposal" style="flex:1;min-width:140px;display:flex;align-items:center;justify-content:center;gap:6px;padding:12px 20px;font-size:13px;border-radius:10px">
-            <svg viewBox="0 0 16 16" width="14" height="14" fill="none"><path d="M4 8l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            Create Proposal
+        
+        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:20px;padding:20px;background:#fff;border-bottom:1px solid var(--brd)">
+            ${reqs.industry ? `<div><div class="reqs-label">Target Industry</div><div style="font-size:14px;font-weight:700;color:var(--navy)">${reqs.industry}</div></div>` : ''}
+            ${reqs.user_count ? `<div><div class="reqs-label">Scaled User Base</div><div style="font-size:14px;font-weight:700;color:var(--navy)">${reqs.user_count} Users</div></div>` : ''}
+            ${reqs.timeline ? `<div><div class="reqs-label">Go-Live Milestone</div><div style="font-size:14px;font-weight:700;color:var(--primary)">${reqs.timeline}</div></div>` : ''}
+        </div>
+
+        ${reqs.detailed_analysis ? `
+        <div class="reqs-section" style="background:#f8fafc">
+            <div class="reqs-label" style="color:var(--primary)">Strategic Technical Analysis</div>
+            <div class="reqs-text" style="font-size:14px;line-height:1.8;color:var(--navy);font-weight:450">${mdToHtml(reqs.detailed_analysis)}</div>
+        </div>
+        ` : ''}
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--brd)">
+            <div class="reqs-section" style="background:#fff;margin:0">
+                <div class="reqs-label">Core Pain Points</div>
+                <ul class="reqs-list">${makeList(reqs.pain_points)}</ul>
+            </div>
+            <div class="reqs-section" style="background:#fff;margin:0">
+                <div class="reqs-label">Architectural Must-Haves</div>
+                <ul class="reqs-list">${makeList(reqs.must_have)}</ul>
+            </div>
+        </div>
+
+        ${(reqs.integrations||[]).length ? `
+        <div class="reqs-section">
+            <div class="reqs-label">Ecosystem Integrations</div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(140px, 1fr));gap:10px;margin-top:8px">
+                ${(reqs.integrations).map(i => `<div style="padding:10px;background:var(--bg);border-radius:8px;border:1px solid var(--brd);font-size:12px;font-weight:600;color:var(--navy);display:flex;align-items:center;gap:8px"><div style="width:6px;height:6px;border-radius:50%;background:var(--primary)"></div>${i}</div>`).join('')}
+            </div>
+        </div>
+        ` : ''}
+
+        ${productChips ? `<div class="reqs-section" style="border-top:1px solid var(--brd)"><div class="reqs-label">Proposed Stack Componentry</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px">${productChips}</div></div>` : ''}
+
+        <div class="reqs-actions">
+          <button class="reqs-btn-confirm" id="confirmProposal">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="none"><path d="M4 8l3 3 5-5" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Approve & Generate Proposal
           </button>
-          <button class="reqs-btn-clarify" id="summaryBtn" style="display:flex;align-items:center;gap:6px;padding:12px 16px;border-radius:10px;background:#f3f4f6;color:#374151">
-            <svg viewBox="0 0 16 16" width="14" height="14" fill="none"><path d="M3 3h10v10H3V3z" stroke="currentColor" stroke-width="1.5"/><path d="M6 6h4M6 8h4M6 10h2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
-            Summary
-          </button>
-          <button class="reqs-btn-clarify" id="clarifyBtn" style="display:flex;align-items:center;gap:6px;padding:12px 16px;border-radius:10px">
-            <svg viewBox="0 0 16 16" width="14" height="14" fill="none"><path d="M11.5 1.5l3 3L5 14H2v-3z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            Changes Required
-          </button>
-          <button class="reqs-btn-wrong" id="wrongBtn" style="display:flex;align-items:center;gap:6px;padding:12px 16px;border-radius:10px">
-            <svg viewBox="0 0 16 16" width="14" height="14" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-            Not Right
-          </button>
+          <div style="display:flex;gap:8px;width:100%">
+              <button class="reqs-btn-clarify" id="clarifyBtn" style="flex:1">Refine Requirements</button>
+              <button class="reqs-btn-wrong" id="wrongBtn">Restart</button>
+          </div>
         </div>
       </div>
     </div>`;
@@ -2240,7 +2305,7 @@ ul.bullets li{font-size:15px;color:var(--slate);margin-bottom:12px;position:rela
             <div style="margin-bottom:14px"><svg viewBox="0 0 48 48" width="48" height="48" fill="none"><circle cx="24" cy="24" r="20" stroke="var(--green)" stroke-width="2.5"/><path d="M15 24l6 6 12-12" stroke="var(--green)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
             <div style="font-size:17px;font-weight:700;margin-bottom:10px">Solution Architecture Complete</div>
             <div style="font-size:13px;color:var(--sub);line-height:1.75;max-width:400px;margin:0 auto">
-                Your requirements have been successfully mapped to the CCMS Reference Architecture by Arya.<br/><br/>
+                Your requirements have been successfully mapped to the CCMS Reference Architecture by Fristine AI.<br/><br/>
                 <strong>A Fristine presales specialist is reviewing your tailored proposal and will share the formal multi-page document with you shortly via email/portal for final approval.</strong>
             </div>
         </div>`, { noEscape: true });

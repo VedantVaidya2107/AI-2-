@@ -5,7 +5,7 @@ const isLocal = window.location.hostname === 'localhost' ||
                  window.location.hostname.startsWith('192.168.');
 
 const PROD_URL = 'https://presales-backend-5u8q.onrender.com';
-const BASE = (isLocal ? `http://${window.location.hostname}:8005` : (import.meta.env.VITE_API_URL || PROD_URL)).replace(/\/$/, '');
+const BASE = (isLocal ? `http://${window.location.hostname}:8000` : (import.meta.env.VITE_API_URL || PROD_URL)).replace(/\/$/, '');
 
 console.log(`[API] Environment: ${isLocal ? 'DEVELOPMENT (Local)' : 'PRODUCTION'}`);
 console.log(`[API] Base URL: ${BASE}`);
