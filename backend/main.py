@@ -44,7 +44,9 @@ app = FastAPI(title="Fristine Presales Backend", redirect_slashes=True, lifespan
 # We MUST use explicit origins (not "*") when allow_credentials is True
 origins = [
     "http://localhost:5173",
+    "http://localhost:5174",
     "http://127.0.0.1:5173",
+    "http://127.0.0.1:5174",
     "http://192.168.20.29:5173",
     "https://vedantvaidya2107.github.io",
     "https://vedantvaidya2107.github.io/",
@@ -72,7 +74,9 @@ app.include_router(gemini.router)
 app.include_router(documents.router)
 app.include_router(voice.router)
 
+
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True, reload_dirs=["backend"])
 

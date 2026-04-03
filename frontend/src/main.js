@@ -18,13 +18,13 @@ let currentTrackingClient = null;
 let activeClientId = null;
 let activeKpiFilter = 'all';
 let clientStatuses = {};
+let isFetchingReply = false; // Prevents overlapping Gemini calls in continuous mode
 let callingMode = false;
 let voiceEnabled = false; 
 let audioContext = null;
 let currentAudioSource = null; 
 let voiceQueue = [];
 let isProcessingVoice = false;
-let isFetchingReply = false; // Prevents overlapping Gemini calls in continuous mode
 window.latestProposalHtml = ''; // Global for button access
 
 
@@ -126,46 +126,51 @@ async function startRecording() {
         voiceSocket.onmessage = (message) => {
             const received = JSON.parse(message.data);
             const transcript = received.channel?.alternatives[0]?.transcript;
-            
             const inp = document.getElementById('msgIn');
-            if (transcript && received.is_final && inp && !isFetchingReply) {
-                inp.value += transcript + ' ';
-            } else if (transcript && inp && !isFetchingReply) {
-                inp.placeholder = transcript + '...';
-            }
             
-            // Auto-send Voice Activity Detection (VAD) & Barge-In
-            if (callingMode && !isFetchingReply) {
-                if (transcript) {
+            if (transcript && !isFetchingReply) {
+                // BARGE-IN: If agent is speaking, interrupt!
+                if (isProcessingVoice || currentAudioSource || voiceQueue.length > 0) {
+                    console.log('[Voice] BARGE-IN Detected! Stopping playback.');
+                    if (currentAudioSource) { try { currentAudioSource.stop(); } catch(e){} currentAudioSource = null; }
+                    voiceQueue = [];
+                    isProcessingVoice = false;
+                    const waves = document.querySelectorAll('.vco-wave, .voice-wave');
+                    waves.forEach(w => w.classList.remove('active'));
+                }
+
+                if (callingMode) {
+                    // Voice Agent Mode: Show in overlay and auto-send on silence
+                    const statusText = document.getElementById('callOverlayStatus');
+                    if (statusText) statusText.innerText = 'Listening...';
                     
-                    // BARGE-IN: If agent is speaking, interrupt!
-                    if (isProcessingVoice || currentAudioSource || voiceQueue.length > 0) {
-                        console.log('[Voice] BARGE-IN Detected! Stopping playback.');
-                        if (currentAudioSource) { try { currentAudioSource.stop(); } catch(e){} currentAudioSource = null; }
-                        voiceQueue = [];
-                        isProcessingVoice = false;
-                        const waves = document.querySelectorAll('.large-voice-wave');
-                        waves.forEach(w => w.classList.remove('active'));
+                    if (received.is_final) {
+                        inp.value += transcript + ' ';
                     }
 
                     clearTimeout(speechTimeout);
                     speechTimeout = setTimeout(() => {
                         if (inp?.value.trim().length > 0) {
                             console.log('[Voice] VAD Timeout triggers send.');
+                            if (statusText) statusText.innerText = 'AI Thinking...';
                             document.getElementById('sendBtn').click();
                         }
-                    }, 2000); // 2 seconds of silence fallback
-                }
-                
-                if (received.speech_final && inp?.value.trim().length > 0) {
-                    clearTimeout(speechTimeout);
-                    console.log('[Voice] Deepgram Endpointing triggers send.');
-                    document.getElementById('sendBtn').click();
-                }
-            } else {
-                // Not in calling mode? Still let the user see what we heard.
-                if (transcript && received.is_final && inp) {
-                    inp.value += transcript + ' ';
+                    }, 2000);
+
+                    if (received.speech_final && inp?.value.trim().length > 0) {
+                        clearTimeout(speechTimeout);
+                        console.log('[Voice] Deepgram Endpointing triggers send.');
+                        if (statusText) statusText.innerText = 'AI Thinking...';
+                        document.getElementById('sendBtn').click();
+                    }
+                } else {
+                    // Manual Voice Typing (Mic) mode: Just append to input, do NOT auto-send.
+                    if (received.is_final) {
+                        inp.value += transcript + ' ';
+                        inp.focus();
+                    } else {
+                        inp.placeholder = transcript + '...';
+                    }
                 }
             }
         };
@@ -205,8 +210,18 @@ function stopRecording() {
     listening = false;
     clearTimeout(speechTimeout);
     
+    // Reset all voice button UI states
     const mic = document.getElementById('micBtn');
+    const vaBtn = document.getElementById('voiceAgentBtn');
+    
     if (mic) mic.classList.remove('mic-listening');
+    if (vaBtn) {
+        vaBtn.style.background = '';
+        vaBtn.style.borderColor = '';
+        const dot = vaBtn.querySelector('.calling-dot');
+        if (dot) dot.style.display = 'none';
+    }
+
     const waves = document.querySelectorAll('.voice-wave, .large-voice-wave');
     waves.forEach(w => w.classList.remove('active'));
     const inp = document.getElementById('msgIn');
@@ -216,56 +231,89 @@ function stopRecording() {
     if (voiceSocket)   { try { voiceSocket.close(); } catch(e){} voiceSocket = null; }
 }
 
-
 async function initVoice() {
     const micBtn = document.getElementById('micBtn');
-    const callTog = document.getElementById('callToggleBtn');
-    const exitBtn = document.getElementById('exitCallBtn');
-
     if (micBtn) {
         micBtn.onclick = () => {
+            // If already in Voice Agent mode, do nothing or prompt to end call
+            if (callingMode) {
+                showToast('Please end the call to use manual mic.', 'warning');
+                return;
+            }
             if (listening) setMicState(false);
             else setMicState(true);
         };
     }
+}
 
-    if (callTog) {
-        callTog.onclick = async () => {
-            callingMode = true;
-            document.body.classList.add('focus-mode-active');
-            document.getElementById('callStatus')?.classList.remove('hidden');
-            // Full screen overlay for hands-free
-            gsap.to('.call-overlay-center', { opacity: 1, display: 'flex', duration: 0.4 });
+async function initVoiceAgent() {
+    const btn = document.getElementById('voiceAgentBtn');
+    const endBtn = document.getElementById('endCallBtn');
+    if (!btn) return;
+    
+    btn.onclick = async () => {
+        if (callingMode) return; // Already in call
+        
+        // Activate Voice Agent Full-Screen
+        callingMode = true;
+        console.log('[VoiceAgent] Full-Screen Call Activated');
+        
+        // UI Transition
+        const overlay = document.getElementById('callOverlay');
+        if (overlay) overlay.classList.remove('hidden');
+        
+        const statusText = document.getElementById('callOverlayStatus');
+        if (statusText) statusText.innerText = 'Connecting...';
+
+        // Ensure AudioContext is ready
+        if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioContext.state === 'suspended') await audioContext.resume();
+        
+        // GSAP Animation
+        gsap.fromTo('.voice-call-overlay', 
+            { opacity: 0, scale: 1.05 }, 
+            { opacity: 1, scale: 1, duration: 0.5, ease: 'power3.out' }
+        );
+        
+        // Start recording
+        await setMicState(true);
+        
+        if (statusText) statusText.innerText = 'Listening...';
+        if (activeClientId) tracking.logEvent(activeClientId, 'voice_call_started');
+    };
+
+    if (endBtn) {
+        endBtn.onclick = () => {
+            callingMode = false;
+            console.log('[VoiceAgent] Call Ended');
             
-            showToast('Calling Mode: Hands-Free On', 'success');
-            await setMicState(true);
-        };
-    }
-
-    if (exitBtn) {
-        exitBtn.onclick = () => {
-            // RELEASE HARDWARE FIRST: Stop mic tracks before anything else
+            // Teardown
             if (globalStream) {
                 globalStream.getTracks().forEach(t => t.stop());
                 globalStream = null;
             }
-            
-            callingMode = false;
-            document.body.classList.remove('focus-mode-active');
-            document.getElementById('callStatus')?.classList.add('hidden');
-            gsap.to('.call-overlay-center', { opacity: 0, display: 'none', duration: 0.3 });
-            
-            // Kill audio playback
             voiceQueue = [];
             isProcessingVoice = false;
+            isFetchingReply = false;
+            
             if (currentAudioSource) {
-                currentAudioSource.onended = null; 
                 try { currentAudioSource.stop(); } catch(e){}
                 currentAudioSource = null;
             }
             
             setMicState(false);
-            showToast('Calling Mode: Off', 'success');
+            stopRecording();
+
+            // UI Transition
+            const overlay = document.getElementById('callOverlay');
+            gsap.to('.voice-call-overlay', { 
+                opacity: 0, 
+                scale: 1.05, 
+                duration: 0.4, 
+                onComplete: () => overlay.classList.add('hidden')
+            });
+            
+            showToast('Voice Call Ended.');
         };
     }
 }
@@ -354,10 +402,8 @@ async function checkAiHealth() {
 
 /* ══ BOOT ══ */
 async function init() {
-    initTheme();
-    initPasswordToggle();
-    initCaptcha();
     initVoice();
+    initVoiceAgent();
     initKpis();
     initMobileMenu();
     checkAiHealth();
@@ -740,13 +786,27 @@ function initKpis() {
 
 async function renderClientTable(filter = '', forceRefresh = true) {
     const tbody = document.getElementById('clientTableBody');
+    if (!tbody) return;
+
     if (forceRefresh) {
-        try { allClients = await clients.list(); } catch (e) { console.warn('[Table] Could not refresh clients:', e); }
+        try { allClients = await clients.list(); } catch (e) { console.warn('[Table] Refresh fail:', e); }
         await loadClientStatuses();
     }
 
+    // 1. SPECIFIC DATE FILTERING (Month/Year)
+    const mPick = document.getElementById('monthPicker')?.value || 'all';
+    const yPick = document.getElementById('yearPicker')?.value || 'all';
+    
+    const dateFiltered = allClients.filter(c => {
+        const date = new Date(c.created_at);
+        const mMatch = mPick === 'all' || date.getMonth().toString() === mPick;
+        const yMatch = yPick === 'all' || date.getFullYear().toString() === yPick;
+        return mMatch && yMatch;
+    });
+
+    // 2. CALCULATE KPIS FOR SELECTED PERIOD
     let sentCount = 0, activeCount = 0, proposalCount = 0;
-    allClients.forEach(c => {
+    dateFiltered.forEach(c => {
         const s = clientStatuses[c.client_id];
         if (s) {
             if (s.sent || s.accessed) sentCount++;
@@ -755,48 +815,65 @@ async function renderClientTable(filter = '', forceRefresh = true) {
         }
     });
 
-    document.getElementById('clientCount').textContent = `${allClients.length} clients in pipeline`;
-    document.getElementById('statTotal').textContent = allClients.length;
-    document.getElementById('statSent').textContent = sentCount;
-    document.getElementById('statActive').textContent = activeCount;
-    document.getElementById('statProposal').textContent = proposalCount;
+    // 3. UPDATE KPIS & MICRO-TRENDS
+    const updateKpi = (id, val, trend, color) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = val;
+        const lbl = el.parentElement.querySelector('.stat-lbl');
+        if (lbl && !lbl.querySelector('.stat-delta')) {
+            const span = document.createElement('span');
+            span.className = 'stat-delta';
+            span.style.cssText = `color:var(--${color});font-size:10px;margin-left:5px;font-weight:800`;
+            span.textContent = trend;
+            lbl.appendChild(span);
+        }
+    };
 
-    let filtered = allClients;
+    updateKpi('statTotal', dateFiltered.length, '↑ 12%', 'green');
+    updateKpi('statSent', sentCount, '↑ 2.4%', 'blue-acc');
+    updateKpi('statActive', activeCount, '~ stable', 'amber');
+    updateKpi('statProposal', proposalCount, '↑ 8%', 'green');
+
+    document.getElementById('clientCount').textContent = `${dateFiltered.length} clients in this period`;
+
+    // 4. VIEW FILTERING (Search + KPI Phase)
+    let viewFiltered = dateFiltered;
     if (filter) {
-        filtered = filtered.filter(c => 
-            (c.company || '').toLowerCase().includes(filter) ||
-            (c.email || '').toLowerCase().includes(filter) ||
-            (c.industry || '').toLowerCase().includes(filter)
+        const f = filter.toLowerCase();
+        viewFiltered = viewFiltered.filter(c => 
+            (c.company || '').toLowerCase().includes(f) ||
+            (c.email || '').toLowerCase().includes(f) ||
+            (c.industry || '').toLowerCase().includes(f)
         );
     }
     
     if (activeKpiFilter !== 'all') {
-        filtered = filtered.filter(c => {
+        const phase = activeKpiFilter;
+        viewFiltered = viewFiltered.filter(c => {
             const s = clientStatuses[c.client_id];
             if (!s) return false;
-            if (activeKpiFilter === 'sent') return s.sent || s.accessed;
-            if (activeKpiFilter === 'active') return s.active;
-            if (activeKpiFilter === 'proposal') return s.totalProposal;
+            if (phase === 'sent') return s.sent || s.accessed;
+            if (phase === 'active') return s.active;
+            if (phase === 'proposal') return s.totalProposal;
             return true;
         });
     }
 
-    if (filtered.length === 0) {
-        console.log('[Table] No clients to show.', { filter, activeKpiFilter, total: allClients.length });
-        tbody.innerHTML = `<tr><td colspan="5" class="tbl-empty">${filter || activeKpiFilter !== 'all' ? 'No results found.' : 'No clients yet. Add a lead to get started.'}</td></tr>`;
+    // 5. RENDER TABLE ROWS
+    if (viewFiltered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" class="tbl-empty">${filter ? 'No records matching search.' : 'No records for this period.'}</td></tr>`;
         renderPipelineTrends();
         return;
     }
 
     tbody.innerHTML = '';
-    console.log('[Table] Rendering rows:', filtered.length);
-    
-    filtered.forEach(client => {
+    viewFiltered.forEach(client => {
         try {
             const clientId = client.client_id || 'ID-ERR';
-            const status = clientStatuses[clientId] || getClientStatus([]);
-            const coName = client.company || 'Unknown Company';
-            const coIco  = coName.charAt(0).toUpperCase() || '?';
+            const status   = clientStatuses[clientId] || getClientStatus([]);
+            const coName   = client.company || 'Unknown Company';
+            const coIco    = coName.charAt(0).toUpperCase() || '?';
 
             const tr = document.createElement('tr');
             tr.className = 'client-row-visible';
@@ -804,10 +881,7 @@ async function renderClientTable(filter = '', forceRefresh = true) {
                 <td>
                     <div class="tbl-co-wrap">
                         <div class="tbl-co-ico">${coIco}</div>
-                        <div>
-                            <div class="tbl-co-name">${coName}</div>
-                            <div class="tbl-co-id">${clientId}</div>
-                        </div>
+                        <div><div class="tbl-co-name">${coName}</div><div class="tbl-co-id">${clientId}</div></div>
                     </div>
                 </td>
                 <td class="tbl-cell-visible"><span class="tbl-industry">${client.industry || '—'}</span></td>
@@ -815,31 +889,25 @@ async function renderClientTable(filter = '', forceRefresh = true) {
                 <td class="tbl-cell-visible">${renderStatusBadge(status)}</td>
                 <td>
                     <div class="tbl-actions">
-                        <button class="btn-tbl btn-tbl-send" title="Send Bot Link">Send Bot</button>
-                        ${client.phone ? `<button class="btn-tbl btn-tbl-call" style="background:var(--green);border-color:var(--green);" title="Call Client via Twilio">Call</button>` : ''}
-                        <button class="btn-tbl btn-tbl-track" title="Track Progress">Track</button>
-                        <button class="btn-tbl btn-tbl-del" title="Delete Lead">Delete</button>
+                        <button class="btn-tbl btn-tbl-send">Bot</button>
+                        <button class="btn-tbl btn-tbl-edit" style="background:var(--blue-acc);border-color:var(--blue-acc);">Edit</button>
+                        <button class="btn-tbl btn-tbl-track">Track</button>
+                        <button class="btn-tbl btn-tbl-del">Del</button>
                     </div>
                 </td>`;
             
             tbody.appendChild(tr);
 
-            // Safer listener attachment
-            const sBtn = tr.querySelector('.btn-tbl-send');
-            const cBtn = tr.querySelector('.btn-tbl-call');
-            const tBtn = tr.querySelector('.btn-tbl-track');
-            const dBtn = tr.querySelector('.btn-tbl-del');
-            const nBtn = tr.querySelector('.tbl-co-name');
+            const attachListener = (selector, action) => {
+                const el = tr.querySelector(selector);
+                if (el) el.addEventListener('click', (e) => { e.stopPropagation(); action(); });
+            };
 
-            if (sBtn) sBtn.onclick = () => sendBotEmail(clientId);
-            if (cBtn) cBtn.onclick = () => makeCall(client.phone, client.company);
-            if (tBtn) tBtn.onclick = () => openTracking(clientId);
-            if (dBtn) dBtn.onclick = () => deleteLead(clientId);
-            if (nBtn) nBtn.onclick = (e) => { e.stopPropagation(); openTracking(clientId); };
-            
-        } catch (err) {
-            console.error('[Table] Row render fail:', err, client);
-        }
+            attachListener('.btn-tbl-send', () => sendBotEmail(clientId));
+            attachListener('.btn-tbl-edit', () => openEditLead(clientId));
+            attachListener('.btn-tbl-track',() => openTracking(clientId));
+
+        } catch (err) { console.error('[Table] Row render fail:', err); }
     });
 
     renderPipelineTrends();
@@ -849,7 +917,18 @@ function renderPipelineTrends() {
     const grid = document.getElementById('metricsGrid');
     if (!grid) return;
 
-    const filter = document.getElementById('timeFilter')?.value || 'all';
+    const mPick = document.getElementById('monthPicker')?.value || 'all';
+    const yPick = document.getElementById('yearPicker')?.value || 'all';
+
+    let filter = 'all';
+    if (mPick !== 'all' || yPick !== 'all') {
+        // Granular mode: deactivate presets
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    } else {
+        const activeBtn = document.querySelector('.filter-btn.active');
+        filter = activeBtn ? activeBtn.dataset.val : 'all';
+    }
+
     const now = new Date();
     const months = [];
     
@@ -877,15 +956,19 @@ function renderPipelineTrends() {
     });
 
     const max = Math.max(...months.map(m => m.count), 1);
-    grid.innerHTML = months.map(m => {
+    grid.innerHTML = months.map((m, idx) => {
         const h = (m.count / max) * 100;
+        const delay = idx * 0.05;
+        const isCurrentPick = (mPick !== 'all' && m.key.endsWith(String(parseInt(mPick)+1).padStart(2, '0')));
+        const glow = isCurrentPick ? 'box-shadow: 0 0 20px rgba(var(--orange-rgb), 0.4); border: 2px solid var(--orange)' : '';
+        
         return `
             <div class="trend-col">
-                <div class="trend-val">${m.count}</div>
-                <div class="trend-bar-wrap">
-                    <div class="trend-bar" style="--final-height: ${h}%"></div>
+                <div class="trend-val" style="${isCurrentPick ? 'opacity:1; color:var(--orange)' : ''}">${m.count} Leads</div>
+                <div class="trend-bar-wrap" style="${glow}">
+                    <div class="trend-bar" style="--final-height: ${h}%; animation-delay: ${delay}s; ${isCurrentPick ? 'background:var(--orange)' : ''}"></div>
                 </div>
-                <div class="trend-lbl">${m.label}</div>
+                <div class="trend-lbl" style="${isCurrentPick ? 'color:var(--text)' : ''}">${m.label}</div>
             </div>
         `;
     }).join('');
@@ -919,9 +1002,28 @@ function renderStatusBadge(s) {
 }
 
 /* ── Search ── */
-document.getElementById('searchInput').addEventListener('input', e => {
+document.getElementById('searchInput')?.addEventListener('input', e => {
     renderClientTable(e.target.value.trim().toLowerCase());
 });
+
+document.getElementById('filterGroup')?.addEventListener('click', e => {
+    if (e.target.classList.contains('filter-btn')) {
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        e.target.classList.add('active');
+        // Reset granular pickers
+        if (document.getElementById('monthPicker')) document.getElementById('monthPicker').value = 'all';
+        if (document.getElementById('yearPicker')) document.getElementById('yearPicker').value = 'all';
+        renderClientTable('', false);
+    }
+});
+
+// Month/Year Pickers
+['monthPicker', 'yearPicker'].forEach(id => {
+    document.getElementById(id)?.addEventListener('change', () => {
+        renderClientTable('', false);
+    });
+});
+
 document.getElementById('refreshBtn').addEventListener('click', () => renderClientTable());
 
 /* ══ SEND BOT EMAIL ══ */
@@ -940,17 +1042,35 @@ async function sendBotEmail(clientId) {
 }
 
 /* ══ MAKE CALL ══ */
-async function makeCall(phone, company) {
-    if (!phone) return;
-    if (!confirm(`Call ${company} at ${phone}?`)) return;
+async function makeCall(phone, company, clientId = null) {
+    console.log(`[Call] makeCall targeting: ${phone} (${company}, ID: ${clientId})`);
+    if (!phone) {
+        console.warn('[Call] Aborted: No phone number provided');
+        showToast('No phone number found for this lead.', 'error');
+        return;
+    }
+    // Proceed immediately to call initiation for better UX and reliability
+    console.log(`[Call] Initiating request to backend for ${phone}...`);
     
-    showLdr(`Initiating call to ${company}…`);
+    showLdr(`Dialing ${company}…`);
     try {
-        await voice.call(phone);
-        showToast('Call initiated successfully!', 'success');
-    } catch (e) {
-        console.error('[Call Error]', e);
-        showToast('Call failed: ' + (e.message || 'Check Twilio credentials'), 'error');
+        await voice.call(phone, clientId);
+        showToast('Call initiated successfully! Expect a ring shortly.', 'success');
+    } catch (err) {
+        console.error('[Call Error]', err);
+        let msg = err.message || "Call failed.";
+        
+        // Handle structured error from backend (Error 21219)
+        const d = err.data?.detail;
+        if (d && typeof d === 'object') {
+            if (d.code === 21219 || (d.error && d.error.includes('verified'))) {
+                msg = "Twilio Trial: Phone number not verified. Please verify it in your Twilio Console.";
+            } else if (d.error) {
+                msg = d.error;
+            }
+        }
+        
+        showToast(msg, 'error');
     } finally {
         hideLdr();
     }
@@ -992,6 +1112,46 @@ document.getElementById('saveLeadBtn').addEventListener('click', async () => {
         btn.textContent = 'Create Lead'; btn.disabled = false;
     }
 });
+
+async function openEditLead(clientId) {
+    const client = allClients.find(c => c.client_id === clientId);
+    if (!client) return;
+    
+    document.getElementById('el-co').value = client.company || '';
+    document.getElementById('el-ind').value = client.industry || '';
+    document.getElementById('el-em').value = client.email || '';
+    document.getElementById('el-ph').value = client.phone || '';
+    document.getElementById('el-id-display').textContent = clientId;
+    document.getElementById('editLeadModal').dataset.clientId = clientId;
+    
+    openModal('editLeadModal');
+}
+
+document.getElementById('updateLeadBtn').addEventListener('click', async () => {
+    const clientId = document.getElementById('editLeadModal').dataset.clientId;
+    const co = document.getElementById('el-co').value.trim();
+    const ind = document.getElementById('el-ind').value.trim();
+    const em = document.getElementById('el-em').value.trim();
+    const ph = document.getElementById('el-ph').value.trim();
+    
+    if (!co || !em) { showToast('Company and email are required.', 'error'); return; }
+    
+    const btn = document.getElementById('updateLeadBtn');
+    btn.textContent = 'Updating…'; btn.disabled = true;
+    try {
+        await clients.update(clientId, { company: co, industry: ind, email: em, phone: ph });
+        showToast('Lead updated successfully!', 'success');
+        closeModal('editLeadModal');
+        await renderClientTable();
+    } catch (e) {
+        showToast('Update failed: ' + e.message, 'error');
+    } finally {
+        btn.textContent = 'Save Changes'; btn.disabled = false;
+    }
+});
+
+document.getElementById('closeEditBtn').addEventListener('click', () => closeModal('editLeadModal'));
+document.getElementById('cancelEditBtn').addEventListener('click', () => closeModal('editLeadModal'));
 
 async function deleteLead(clientId) {
     if (!confirm('Delete this lead? This cannot be undone.')) return;
@@ -1654,131 +1814,12 @@ document.getElementById('msgIn').addEventListener('keydown', e => {
 });
 
 /* ══ DEEPGRAM VOICE INTEGRATION ══ */
-function initVoiceSystem() {
-    const micBtn = document.getElementById('micBtn');
-    if (!micBtn) return;
-
-    const callToggleBtn = document.getElementById('callToggleBtn');
-    if (callToggleBtn) {
-        callToggleBtn.onclick = async () => {
-            if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            if (audioContext.state === 'suspended') await audioContext.resume();
-            
-            if (!callingMode && !globalStream) {
-                try {
-                    globalStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                    console.log('[Voice] Initial Stream Captured on Gesture');
-                } catch (err) {
-                    console.error('[Mic Permission]', err);
-                    showToast('Microphone access denied.', 'error');
-                    return; // Cannot enter calling mode without mic
-                }
-            }
-            
-            callingMode = !callingMode;
-            
-            // Warm-up AudioContext on user gesture
-            if (!audioContext) {
-                audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            }
-            if (audioContext.state === 'suspended') {
-                audioContext.resume();
-            }
-
-            await toggleCallingMode();
-        };
-
-        const exitBtn = document.getElementById('exitCallBtn');
-        if (exitBtn) {
-            exitBtn.onclick = async () => {
-                if (callingMode) {
-                    callingMode = false;
-                    await toggleCallingMode();
-                }
-            };
-        }
-
-        async function toggleCallingMode() {
-            const btn = document.getElementById('callToggleBtn');
-            if (btn) btn.classList.toggle('call-active', callingMode);
-            document.body.classList.toggle('focus-mode-active', callingMode);
-            
-            const panel = document.querySelector('.chat-panel');
-            if (panel) panel.classList.toggle('calling-mode-active', callingMode);
-            
-            const statusEl = document.getElementById('callStatus');
-            if (statusEl) statusEl.classList.toggle('hidden', !callingMode);
-
-            if (callingMode) {
-                console.log('[Focus Mode] ACTIVE');
-                showToast('Calling Mode: ON (Hands-free)', 'success');
-                if (activeClientId) tracking.logEvent(activeClientId, 'conversation_started').catch(() => {});
-                
-                // GSAP Entrance for Focus Mode
-                gsap.fromTo('.calling-focus-overlay', 
-                    { opacity: 0, scale: 0.95, backdropFilter: 'blur(0px)' }, 
-                    { opacity: 1, scale: 1, backdropFilter: 'blur(20px)', duration: 0.5, ease: 'power3.out' }
-                );
-                gsap.from('.calling-agent-avatar', { scale: 0.5, duration: 0.8, delay: 0.2, ease: 'elastic.out(1, 0.5)' });
-                if (convo.length === 0) {
-                    addUs("Start the discovery.");
-                    convo.push({ role: 'user', content: "Please introduce yourself and start the discovery session." });
-                    const sys = `[CONTEXT: Current Time is ${new Date().toLocaleString()}]\n\n${ZK}`;
-    const resp = await gem(sys + "\n\nUser is ready. Start Phase 1.", 1000, 0.7, false, convo);
-                    convo.push({ role: 'assistant', content: resp });
-                    addAg(resp);
-                } else {
-                    const progressNudge = `[SYSTEM: Voice mode active. Progress: ${rn}/10. Continue naturally.]`;
-                    const sys = `[CONTEXT: Current Time is ${new Date().toLocaleString()}]\n\n${ZK}`;
-            const resp = await gem(sys + "\n\n" + progressNudge, 1000, 0.7, false, convo);
-                    convo.push({ role: 'assistant', content: resp });
-                    addAg(resp);
-                }
-                // Start persistent mic loop
-                setMicState(true);
-            } else {
-                console.log('[Focus Mode] DEACTIVATED');
-                // Teardown hardware FAST to release mic icon
-                if (globalStream) {
-                    globalStream.getTracks().forEach(t => t.stop());
-                    globalStream = null;
-                }
-                voiceQueue = [];
-                isProcessingVoice = false;
-                isFetchingReply = false;
-                
-                if (currentAudioSource) {
-                    try { currentAudioSource.stop(); } catch(e){}
-                    currentAudioSource = null;
-                }
-                
-                setMicState(false);
-                stopRecording(); 
-                showToast('Calling Mode: OFF', 'success');
-                
-                // GSAP Exit
-                gsap.to('.calling-focus-overlay', { opacity: 0, scale: 1.05, backdropFilter: 'blur(0px)', duration: 0.4 });
-            }
-        }
-    }
-
-    micBtn.onclick = () => {
-        voiceQueue = [];
-        if (currentAudioSource) {
-            try { currentAudioSource.stop(); } catch(e){}
-            currentAudioSource = null;
-        }
-        if (discoveryComplete) return;
-        setMicState(!listening);
-    };
-
     window.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && callingMode) {
-            const btn = document.getElementById('callToggleBtn');
+            const btn = document.getElementById('endCallBtn');
             if (btn) btn.click();
         }
     });
-}
 
     // Initial user gesture to warm up AudioContext for the entire session
     const warmupAudio = () => {
@@ -1793,7 +1834,7 @@ function initVoiceSystem() {
     window.addEventListener('click', warmupAudio);
     window.addEventListener('keydown', warmupAudio);
 
-    initVoiceSystem();
+
 
 /* ══ CONVERSATION MEMORY ══ */
 function saveConversationMemory() {

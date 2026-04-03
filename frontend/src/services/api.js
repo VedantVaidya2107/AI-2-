@@ -1,13 +1,26 @@
 /* api.js — All backend API calls in one place */
 
+const isNgrok = window.location.hostname.includes('ngrok-free.dev') || window.location.hostname.includes('ngrok.io');
+const isCloudflare = window.location.hostname.includes('trycloudflare.com');
 const isLocal = window.location.hostname === 'localhost' || 
                  window.location.hostname === '127.0.0.1' || 
                  window.location.hostname.startsWith('192.168.');
 
 const PROD_URL = 'https://presales-backend-5u8q.onrender.com';
-const BASE = (isLocal ? `http://${window.location.hostname}:8000` : (import.meta.env.VITE_API_URL || PROD_URL)).replace(/\/$/, '');
 
-console.log(`[API] Environment: ${isLocal ? 'DEVELOPMENT (Local)' : 'PRODUCTION'}`);
+// If on Ngrok, use the same host for API. If on Localhost, use :8000. Else use Prod.
+let BASE = PROD_URL;
+if (isLocal) {
+  BASE = `http://${window.location.hostname}:8000`;
+} else if (isNgrok || isCloudflare) {
+  BASE = `${window.location.protocol}//${window.location.hostname}`;
+} else if (import.meta.env.VITE_API_URL) {
+  BASE = import.meta.env.VITE_API_URL;
+}
+
+BASE = BASE.replace(/\/$/, '');
+
+console.log(`[API] Environment: ${isLocal ? 'LOCAL' : (isNgrok ? 'TUNNEL' : 'PROD')}`);
 console.log(`[API] Base URL: ${BASE}`);
 
 /* ══ MOCK MODE (runs when backend is unreachable) ══════════════════════════ */
@@ -109,20 +122,41 @@ const _mockTracking  = mockTracking();
 const _mockProposals = mockProposals();
 
 /* ══ REAL REQUEST ══════════════════════════════════════════════════════════ */
-async function request(method, path, body = null, ignoreMock = false) {
+async function request(method, path, body = null, ignoreMock = false, timeoutMs = 15000) {
   if (_mockMode && !ignoreMock) throw new Error('mock mode');
-  const opts = { method, headers: { 'Content-Type': 'application/json' } };
-  if (body) opts.body = JSON.stringify(body);
-  const res  = await fetch(`${BASE}${path}`, opts);
-  const text = await res.text().catch(() => '');
-  let data = {};
-  try { data = JSON.parse(text); } catch { data = { detail: text }; }
   
-  if (!res.ok) {
-    const errMsg = data.error || data.detail || `API error (${res.status})`;
-    throw Object.assign(new Error(errMsg), { status: res.status, data });
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  
+  const opts = { 
+    method, 
+    headers: { 'Content-Type': 'application/json' },
+    signal: controller.signal
+  };
+  
+  if (body) opts.body = JSON.stringify(body);
+  
+  try {
+    const res = await fetch(`${BASE}${path}`, opts);
+    clearTimeout(id);
+    const text = await res.text().catch(() => '');
+    let data = {};
+    try { data = JSON.parse(text); } catch { data = { detail: text }; }
+    
+    if (!res.ok) {
+      console.error(`[API Error] ${method} ${path}:`, data);
+      const errMsg = data.error || data.detail || `API error (${res.status})`;
+      throw Object.assign(new Error(errMsg), { status: res.status, data });
+    }
+    return data;
+  } catch (err) {
+    clearTimeout(id);
+    if (err.name === 'AbortError') {
+      console.error(`[API Timeout] ${method} ${path} timed out after ${timeoutMs}ms`);
+      throw new Error(`Request timed out. The backend or tunnel might be slow.`);
+    }
+    throw err;
   }
-  return data;
 }
 
 /* ── Auth ── */
@@ -197,7 +231,12 @@ export const voice = {
       return { audio: null };
     }
   },
-  call: (phone) => _mockMode ? (console.log('[MOCK] Call to', phone), Promise.resolve({ success: true })) : request('POST', '/api/voice/call', { phone }),
+  call: (phone, clientId = null) => {
+    console.log(`[API] Triggering call to ${phone} (Client: ${clientId}) via backend...`);
+    return _mockMode 
+      ? (console.log('[MOCK] Call to', phone), Promise.resolve({ success: true })) 
+      : request('POST', '/api/voice/call', { phone, client_id: clientId }, false, 25000); 
+  },
 };
 
 
